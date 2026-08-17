@@ -18,7 +18,7 @@ Output matches the browser backend's snapshot shape, with two documented
 differences: reaction `image_url` is empty (the API returns emoji names, not URLs)
 and attachment URLs are `url_private`, which needs the token to download.
 
-NOTE: this backend is not exercised by the maintainer's own workspace — the
+NOTE: this backend has not been verified against a live workspace. The
 normalization is covered by fixture tests (`tools/tests/test_slack_api.py`), but
 the live calls are not. Report anything that looks wrong.
 """

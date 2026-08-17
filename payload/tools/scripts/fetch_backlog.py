@@ -1,7 +1,7 @@
 """Snapshot a Backlog issue (with its comments) into references/raw-source/.
 
-Backlog issues are edited and closed over time, so a bare issue-key citation rots.
-This freezes the issue and its comments as JSON.
+Backlog issues are edited and closed over time, so a link to an issue key goes
+stale. This freezes the issue and its comments as JSON.
 
     <tools> backlog ABC123-45
 

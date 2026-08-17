@@ -67,8 +67,8 @@ npm test    # node:test installer suite + Python fixture tests
 The installer tests run against a throwaway `WS_SKILLS_HOME` / `CLAUDE_CONFIG_DIR`,
 so they never touch the developer's real Claude Code config. Keep it that way.
 
-The Slack **API** backend cannot be exercised live (the maintainer's workspace does
-not grant API access). Its normalization is therefore fixture-driven — any change
+The Slack **API** backend has not been verified against a live workspace. Its
+normalization is therefore fixture-driven — any change
 to `slack_api.py` needs a matching case in `payload/tools/tests/test_slack_api.py`,
 and the "not verified against a live workspace" note in the README stays until it is.
 

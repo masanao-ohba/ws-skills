@@ -48,8 +48,8 @@ override both).
 
 ## Pitfalls
 
-- Issues are edited and closed over time, so citing an issue key alone rots. Take a
-  snapshot of anything you intend to quote.
+- Issues are edited and closed over time, so a link to an issue key goes stale.
+  Take a snapshot of anything you need to keep.
 - A digest keeps every comment that has a body, verbatim, and drops only the
   bodiless bookkeeping ones (logged-hours bumps and the like). It is a filter, not
   a summary — do not treat what it drops as "nothing happened".

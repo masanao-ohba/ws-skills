@@ -121,9 +121,9 @@ users:read
 A bot token (`xoxb-`) must also be invited to a private channel before it can read
 it; a user token (`xoxp-`) sees what you see.
 
-> **Not verified against a live workspace.** The maintainer's own workspace does
-> not grant API access, so this backend's normalization is covered by fixture
-> tests but its live calls are not. If something looks wrong, please open an issue.
+> **Not verified against a live workspace.** This backend's normalization is
+> covered by fixture tests, but its live calls have not been exercised. If
+> something looks wrong, please open an issue.
 
 **Browser backend** (no token) — Playwright drives its own Chromium, separate from
 the browser you use, so your everyday session is untouched.

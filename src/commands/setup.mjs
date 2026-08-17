@@ -122,7 +122,7 @@ async function setupSlack(values) {
   if (backend === 'api') {
     info('Scopes to grant: channels:history, groups:history, im:history, mpim:history,');
     info('channels:read, groups:read, im:read, mpim:read, users:read.');
-    info(dim('This backend is not exercised on the maintainer\'s own workspace — see the README.'));
+    info(dim('This backend has not been verified against a live workspace — see the README.'));
     const token = await askSecret('Slack token (xoxp-... or xoxb-...)', {
       keep: Boolean(values.SLACK_TOKEN),
     });

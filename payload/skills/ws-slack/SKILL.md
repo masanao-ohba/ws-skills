@@ -1,6 +1,6 @@
 ---
 name: ws-slack
-description: Fetch Slack channels, DMs, and threads as JSON, through either the Slack Web API (with a token) or browser automation (no token needed). Use when the user wants Slack logs retrieved, a channel saved, or Slack evidence collected. Also invocable as a command via /ws-slack followed by instructions.
+description: Fetch Slack channels, DMs, and threads as JSON, through either the Slack Web API (with a token) or browser automation (no token needed). Use when the user wants Slack logs retrieved, a channel saved, or a conversation archived. Also invocable as a command via /ws-slack followed by instructions.
 ---
 
 # ws-slack
