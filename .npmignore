@@ -1,0 +1,5 @@
+# Build artifacts of the Python side — regenerated on the user's machine.
+__pycache__/
+*.pyc
+.venv/
+.metadata_never_index

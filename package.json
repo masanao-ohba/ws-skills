@@ -1,0 +1,45 @@
+{
+  "name": "@masanao-ohba/ws-skills",
+  "version": "0.1.0",
+  "description": "Installs three Claude Code skills — /ws-google, /ws-slack, /ws-backlog — for fetching and updating Google Workspace, Slack, and Backlog material, and walks you through the credentials they need.",
+  "type": "module",
+  "bin": {
+    "ws-skills": "bin/cli.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "payload",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs && python3 payload/tools/tests/test_slack_api.py"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "skills",
+    "slack",
+    "backlog",
+    "google-workspace",
+    "google-docs",
+    "google-sheets"
+  ],
+  "author": "Masanao Ohba",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masanao-ohba/ws-skills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/masanao-ohba/ws-skills/issues"
+  },
+  "homepage": "https://github.com/masanao-ohba/ws-skills#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}

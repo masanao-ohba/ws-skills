@@ -1,0 +1,11 @@
+[project]
+name = "ws-tools"
+version = "0.1.0"
+description = "Fetch and update Google Workspace, Slack and Backlog material (shared by the ws-* skills)"
+requires-python = ">=3.11"
+dependencies = [
+    "google-api-python-client>=2.198.0",
+    "google-auth-oauthlib>=1.4.0",
+    "playwright>=1.61.0",
+    "pycryptodomex>=3.23.0",
+]
