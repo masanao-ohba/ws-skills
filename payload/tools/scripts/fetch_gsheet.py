@@ -1,7 +1,6 @@
 """Snapshot a Google Sheet's cell values into references/raw-source/.
 
-Tables in Sheets are edited in place, so a link alone shows only today's state.
-This freezes the values of every tab (or a named one) as JSON.
+Freezes the values of every tab (or a named one) as JSON.
 
     <tools> gsheet <SHEET_ID_OR_URL>              # every tab
     <tools> gsheet <URL> --tab "Summary"          # tabs whose title contains this

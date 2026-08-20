@@ -1,14 +1,12 @@
 """Export the Slack desktop app's session as a Playwright storage_state.
 
-A workspace that signs in through Google cannot be driven by a scripted login, so
-the way in is the session that already exists: the desktop app stores its cookies
-the way Chromium does — an AES-CBC encrypted store with the key in the OS keychain
-— so the current session can be read and handed to Playwright. The `d` cookie is a
-unified Slack session, so this reaches every workspace the app is signed into.
+The app stores its cookies the way Chromium does — an AES-CBC encrypted store with
+the key in the OS keychain. The `d` cookie is a unified Slack session, so this
+reaches every workspace the app is signed into.
 
-macOS only for now; on other platforms use `slack-signin` instead.
-Nothing here reaches the network; cookie values are written only to the local
-state file, which the caller deletes as soon as the run ends.
+macOS only for now; on other platforms use `slack-signin` instead. Nothing here
+reaches the network; cookie values are written only to the local state file, which
+the caller deletes as soon as the run ends.
 """
 
 from __future__ import annotations

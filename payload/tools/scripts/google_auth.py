@@ -11,9 +11,8 @@ tooling home's `google/` directory:
     default        credentials.json          token_readonly.json
     <name>         credentials_<name>.json   token_readonly_<name>.json
 
-A Google Workspace OAuth client registered as "Internal" only accepts accounts in
-its own organization, so a second organization needs its own client — hence one
-profile per organization rather than one client for all of them.
+An "Internal" OAuth client only accepts accounts in its own organization, so a
+second organization needs its own profile.
 
     <tools> auth                       # authorize the read-only token
     <tools> auth --check               # status of every profile and token
@@ -41,8 +40,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 
-# Write access lives in SEPARATE per-service tokens so the read-only token keeps its
-# structural guarantee: the fetch commands hold a credential that cannot write.
+# Separate per-service tokens: the read-only token stays unable to write.
 WRITE_SCOPES = {
     "sheets": ["https://www.googleapis.com/auth/spreadsheets"],
     "docs": ["https://www.googleapis.com/auth/documents"],
@@ -119,8 +117,8 @@ def _authorize(profile: str, scopes: list[str], open_browser: bool = False) -> C
     print(f"\n=== Open this URL and approve with the '{profile}' account ===", flush=True)
     print(url, flush=True)
     print(f"\n(waiting for the redirect to {redirect_uri} ...)\n", flush=True)
-    # Not opened automatically by default: signing in to a work domain in the browser
-    # the tool picks can invalidate the session of the browser you actually use.
+    # Off by default: signing in through the browser the tool picks can invalidate
+    # the session of the browser the person actually uses.
     if open_browser:
         webbrowser.open(url)
 

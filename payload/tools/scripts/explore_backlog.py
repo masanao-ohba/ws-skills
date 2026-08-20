@@ -1,7 +1,6 @@
 """Explore a Backlog project read-only.
 
-The API key is resolved per project by backlog_client, so a key scoped to one
-project is never used against another.
+The API key is resolved per project by backlog_client.
 
     <tools> bl-explore overview   --project ABC123
     <tools> bl-explore issues     --project ABC123 --keyword release --since 2026-01-01

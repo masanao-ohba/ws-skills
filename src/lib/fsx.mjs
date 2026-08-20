@@ -27,10 +27,8 @@ export async function lstatOrNull(target) {
 /**
  * Make `dest` a copy of `src`, keeping named entries that only exist in `dest`.
  *
- * Everything else in `dest` goes first, so a file deleted upstream does not
- * survive an upgrade as a stale leftover. `keep` is for things the installer did
- * not put there and should not throw away — `.venv`, above all: rebuilding it
- * means re-downloading every Python dependency on each upgrade.
+ * Everything not named in `keep` goes first, so a file deleted upstream does not
+ * survive an upgrade.
  */
 export async function syncDir(src, dest, { keep = [] } = {}) {
   await fs.mkdir(dest, { recursive: true });
@@ -38,8 +36,8 @@ export async function syncDir(src, dest, { keep = [] } = {}) {
     if (keep.includes(entry)) continue;
     await fs.rm(path.join(dest, entry), { recursive: true, force: true });
   }
-  // Running from a checkout, the source tree carries the developer's own build
-  // artifacts. The published tarball excludes them; this makes both paths agree.
+  // A checkout carries build artifacts the published tarball excludes; skipping
+  // them here makes both paths agree.
   await fs.cp(src, dest, { recursive: true, filter: (from) => !isBuildArtifact(from) });
 }
 

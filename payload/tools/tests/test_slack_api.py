@@ -117,7 +117,7 @@ class NormalizeTest(unittest.TestCase):
             set(msg),
             {
                 "timestamp", "sender", "text", "avatar_url",
-                "reactions", "attachments", "slack_ts", "user_id",
+                "reactions", "attachments", "slack_ts", "user_id", "has_thread",
             },
         )
         self.assertEqual(msg["sender"], "alice")
@@ -135,6 +135,15 @@ class NormalizeTest(unittest.TestCase):
 
     def test_thread_parent_is_detected(self):
         self.assertTrue(slack_api.has_thread(HISTORY_FIXTURE["messages"][0]))
+
+    def test_thread_parent_is_marked_like_the_scraper(self):
+        # parser.py sets has_thread on thread parents; the shapes must match.
+        msg = slack_api.normalize_message(HISTORY_FIXTURE["messages"][0], USERS)
+        self.assertIs(msg["has_thread"], True)
+
+    def test_a_plain_message_carries_no_thread_mark(self):
+        msg = slack_api.normalize_message(HISTORY_FIXTURE["messages"][1], USERS)
+        self.assertNotIn("has_thread", msg)
 
     def test_a_reply_is_not_a_thread_parent(self):
         reply = {"ts": "1775000100.000000", "thread_ts": "1775000000.000100", "reply_count": 0}
@@ -199,6 +208,53 @@ class SnapshotTest(unittest.TestCase):
                 del os.environ["WS_OUTPUT_DIR"]
             self.assertNotEqual(first, second)
             self.assertTrue(first.exists() and second.exists())
+
+
+class ThreadFailureTest(unittest.TestCase):
+    """A thread that could not be read must not read as a thread with no replies.
+
+    The browser backend drops one intermittently; when it does, the snapshot has to
+    say so, or a later reader counts the gap as a fact about the conversation.
+    """
+
+    def test_failures_are_counted_in_the_envelope(self):
+        messages = [
+            {"timestamp": "2026-08-18T02:29:32+00:00", "sender": "a", "text": "one"},
+            {
+                "timestamp": "2026-08-18T02:37:20+00:00",
+                "sender": "b",
+                "text": "two",
+                "thread_replies_failed": True,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["WS_OUTPUT_DIR"] = tmp
+            try:
+                out = slack_output.write_snapshot(
+                    messages, backend="browser", team_id="T1", channel_id="C1"
+                )
+            finally:
+                del os.environ["WS_OUTPUT_DIR"]
+            written = json.loads(out.read_text(encoding="utf-8"))
+
+        self.assertEqual(written["thread_failure_count"], 1)
+        self.assertTrue(written["messages"][1]["thread_replies_failed"])
+
+    def test_a_clean_run_still_carries_the_count(self):
+        messages = [{"timestamp": "2026-08-18T02:29:32+00:00", "sender": "a", "text": "one"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["WS_OUTPUT_DIR"] = tmp
+            try:
+                out = slack_output.write_snapshot(
+                    messages, backend="api", team_id="T1", channel_id="C1"
+                )
+            finally:
+                del os.environ["WS_OUTPUT_DIR"]
+            written = json.loads(out.read_text(encoding="utf-8"))
+
+        # Zero has to be written, not omitted: absent would be indistinguishable
+        # from a snapshot taken before the count existed.
+        self.assertEqual(written["thread_failure_count"], 0)
 
 
 if __name__ == "__main__":

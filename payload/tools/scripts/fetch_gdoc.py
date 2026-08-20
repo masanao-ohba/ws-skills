@@ -101,8 +101,12 @@ def fetch(doc_ref: str, out_path: str | None = None, profile: str = "default") -
     else:
         lines.extend(render_body(doc.get("body", {}).get("content", []), base_depth=1))
 
-    target = Path(out_path) if out_path else ws_paths.raw_source() / f"{title}.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
+    if out_path:
+        target = Path(out_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        # An explicit OUT_PATH is the caller's to overwrite; the default one is not.
+        target = ws_paths.unique_path(ws_paths.raw_source(), f"{title}.md")
 
     text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
     target.write_text(text.rstrip() + "\n", encoding="utf-8")

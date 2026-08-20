@@ -1,6 +1,5 @@
 """Fetch Google Calendar events for a date range into references/raw-source/.
 
-Useful for pinning down dates that memory alone cannot (meetings, room bookings).
 Colleagues' calendars are included where they are shared with the account.
 
     <tools> gcal --from 2026-04-01 --to 2026-04-30
@@ -70,8 +69,9 @@ def fetch(date_from: str, date_to: str, calendar: str = "primary", profile: str 
     collected.sort(key=lambda e: e["start"] or "")
 
     suffix = "" if profile == "default" else f"-{profile}"
-    out = ws_paths.raw_source() / f"gcal{suffix}-{date_from}_{date_to}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out = ws_paths.unique_path(
+        ws_paths.raw_source(), f"gcal{suffix}-{date_from}_{date_to}.json"
+    )
     out.write_text(
         json.dumps(
             {

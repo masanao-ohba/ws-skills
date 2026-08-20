@@ -20,20 +20,29 @@ class Message:
     attachments: list[dict] = field(default_factory=list)    # [{name, url}]
     thread_replies: list["Message"] = field(default_factory=list)
     has_thread: bool = False
+    # Set when the thread panel could not be read. Without it a thread that failed
+    # to open is indistinguishable in the output from a message with no replies —
+    # and the failure is the case where replies are certainly missing.
+    thread_failed: bool = False
 
     def to_dict(self) -> dict:
         d = {
             "timestamp": self.timestamp,
             "sender": self.sender,
             "text": self.text,
+            "slack_ts": self.slack_ts,
             "avatar_url": self.avatar_url,
             "reactions": self.reactions,
             "attachments": self.attachments,
         }
         if self.inline_emoji:
             d["inline_emoji"] = self.inline_emoji
+        if self.has_thread:
+            d["has_thread"] = True
         if self.thread_replies:
             d["thread_replies"] = [r.to_dict() for r in self.thread_replies]
+        if self.thread_failed:
+            d["thread_replies_failed"] = True
         return d
 
 

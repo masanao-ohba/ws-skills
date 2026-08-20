@@ -1,7 +1,5 @@
 """Snapshot the comment threads on a Google Doc / Sheet into references/raw-source/.
 
-Review exchanges often happen in document comments rather than in the document body,
-and comments get resolved and hidden over time, so the body alone loses the exchange.
 Works for any Drive file (Docs, Sheets, Slides) — comments live on the Drive item.
 
     <tools> gcomments <FILE_ID_OR_URL>
@@ -39,9 +37,8 @@ def fetch(ref: str, profile: str = "default", label: str | None = None) -> Path:
     creds = get_credentials(profile)
     drive = build("drive", "v3", credentials=creds, cache_discovery=False)
 
-    # Team material usually lives on a shared drive; without supportsAllDrives the API
-    # answers 404 for a file the account can actually read, which reads as "access
-    # revoked" and is not.
+    # Without supportsAllDrives the API answers 404 for a shared-drive file the
+    # account can actually read.
     meta = (
         drive.files()
         .get(fileId=file_id, fields="id,name,mimeType,modifiedTime,driveId", supportsAllDrives=True)

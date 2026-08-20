@@ -8,10 +8,9 @@ export function packageRoot() {
 }
 
 /**
- * Where the tools, skills and credentials are installed.
+ * Where credentials and settings live: the .env, OAuth tokens, the Slack session.
  *
- * Never inside the package: `npx` unpacks into a cache directory that is wiped,
- * and the skill symlinks have to keep pointing at something that stays put.
+ * Nothing executable is kept here.
  */
 export function configHome() {
   if (process.env.WS_SKILLS_HOME) return path.resolve(process.env.WS_SKILLS_HOME);
@@ -25,16 +24,30 @@ export function claudeDir() {
 }
 
 export const skillsDir = () => path.join(claudeDir(), 'skills');
-export const toolsDir = () => path.join(configHome(), 'tools');
-export const installedSkillsDir = () => path.join(configHome(), 'skills');
+
+/** A skill's own directory — SKILL.md plus its `tools` link. */
+export const skillDir = (name) => path.join(skillsDir(), name);
+
+/** The Python tooling, one copy shared by every skill, reached as `<skill>/tools`. */
+export const TOOLS_DIRNAME = 'ws-skills-tools';
+export const toolsDir = () => path.join(skillsDir(), TOOLS_DIRNAME);
+
+/** The `tools` link inside a skill — what SKILL.md tells Claude to run. */
+export const skillToolsLink = (name) => path.join(skillDir(name), 'tools');
+
 export const googleDir = () => path.join(configHome(), 'google');
 export const slackDir = () => path.join(configHome(), 'slack');
 export const envFile = () => path.join(configHome(), '.env');
 
-/** The command the SKILL.md files tell Claude to run. */
-export function toolsCommand() {
-  return `uv run --project ${tildify(toolsDir())} python ${tildify(path.join(toolsDir(), 'main.py'))}`;
-}
+/**
+ * Where a replaced foreign skill is moved aside. Outside ~/.claude/skills so
+ * Claude Code does not discover the old SKILL.md as a duplicate skill.
+ */
+export const backupsDir = () => path.join(configHome(), 'backups');
+
+/** Where earlier versions put the tools and the skill copies. */
+export const legacyToolsDir = () => path.join(configHome(), 'tools');
+export const legacySkillsDir = () => path.join(configHome(), 'skills');
 
 export function tildify(p) {
   const home = os.homedir();

@@ -1,7 +1,4 @@
-"""Write cell values to a Google Sheet range.
-
-Uses the separate Sheets write token; the read-only token the fetch commands hold
-is never touched.
+"""Write cell values to a Google Sheet range, using the separate Sheets write token.
 
     <tools> gsheet-write <SHEET_ID_OR_URL> --range 'Tab!A1' --values '[["a","b"],["c","d"]]'
     <tools> gsheet-write <SHEET_ID_OR_URL> --range 'Tab!A1' --csv data.csv --append

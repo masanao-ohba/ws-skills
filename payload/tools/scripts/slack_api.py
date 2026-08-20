@@ -14,13 +14,22 @@ Everything here is read-only: only `*.history`, `*.replies`, `*.list` and
 
     <tools> slack --channel C0123456789 --since 2026-04-01 --backend api
 
-Output matches the browser backend's snapshot shape, with two documented
-differences: reaction `image_url` is empty (the API returns emoji names, not URLs)
-and attachment URLs are `url_private`, which needs the token to download.
+Output matches the browser backend's snapshot shape. Where it cannot, the
+difference is structural, not accidental:
 
-NOTE: this backend has not been verified against a live workspace. The
-normalization is covered by fixture tests (`tools/tests/test_slack_api.py`), but
-the live calls are not. Report anything that looks wrong.
+    user_id                 API only — the DOM does not carry user ids
+    inline_emoji            browser only — the API renders emoji into the text
+    thread_replies_failed   browser only — a failed API read raises instead of
+                            returning a thread with its replies missing
+    avatar_url              always empty; the scraper downloads avatars, this does not
+    reactions[].count       API only, but `image_url` is empty (the API returns
+                            emoji names, not URLs, so there is nothing to download)
+    attachments[].url       `url_private`, which needs the token to download; there
+                            is no `local_path` because nothing is downloaded here
+
+The normalization is covered by fixture tests (`tools/tests/test_slack_api.py`);
+the live calls have been exercised against a real workspace with a user token.
+Report anything that looks wrong.
 """
 
 from __future__ import annotations
@@ -65,8 +74,7 @@ def to_iso(ts: str | float) -> str:
 def to_epoch(date: str) -> str:
     """`YYYY-MM-DD` -> the epoch second of that day's UTC midnight.
 
-    UTC, so the boundary matches the browser backend, which compares the UTC date
-    rendered from the same epoch.
+    UTC, so the boundary matches the browser backend's.
     """
     dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     return str(int(dt.timestamp()))
@@ -81,7 +89,7 @@ def render_text(text: str, users: dict[str, str] | None = None) -> str:
 
     `<@U123>` becomes the display name when known, `<#C1|general>` becomes
     `#general`, and `<http://x|label>` becomes `label`. Unknown ids are kept as
-    `@U123` rather than dropped, so nothing silently disappears.
+    `@U123` rather than dropped.
     """
     users = users or {}
 
@@ -118,7 +126,7 @@ def normalize_message(raw: dict, users: dict[str, str] | None = None) -> dict:
         {"name": f.get("name") or f.get("title") or "", "url": f.get("url_private", "")}
         for f in raw.get("files", [])
     ]
-    return {
+    message = {
         "timestamp": to_iso(raw.get("ts", "")),
         "sender": sender_name(raw, users),
         "text": render_text(raw.get("text", ""), users),
@@ -128,6 +136,10 @@ def normalize_message(raw: dict, users: dict[str, str] | None = None) -> dict:
         "slack_ts": raw.get("ts", ""),
         "user_id": raw.get("user", ""),
     }
+    # The scraper marks thread parents the same way (parser.py).
+    if has_thread(raw):
+        message["has_thread"] = True
+    return message
 
 
 def has_thread(raw: dict) -> bool:
@@ -267,6 +279,33 @@ def fetch(
         workspace=ws_paths.lookup("SLACK_WORKSPACE"),
         since=since,
         label=label,
+    )
+
+
+def resolve_channel(name: str, team_id: str | None = None) -> str:
+    """Look up one channel ID by name.
+
+    There is no name-to-ID endpoint, so this pages `conversations.list` and matches
+    exactly. Callers cache the answer.
+    """
+    import slack_channels
+
+    wanted = slack_channels.normalize(name)
+    tok = token()
+    convs = _paged(
+        "conversations.list",
+        {"types": "public_channel,private_channel", "exclude_archived": "false"},
+        "channels",
+        tok,
+    )
+    for c in convs:
+        if (c.get("name") or "") == wanted:
+            print(f"[slack-api] {wanted} -> {c['id']}")
+            return c["id"]
+
+    raise SystemExit(
+        f"[slack-api] no channel named '{wanted}'. A private channel is only listed "
+        "once the token's app has been invited to it."
     )
 
 

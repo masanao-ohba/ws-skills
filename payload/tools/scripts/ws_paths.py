@@ -1,16 +1,14 @@
 """Path and environment resolution for the ws-* skills.
 
-Nothing here depends on a repository or a project layout. Values resolve in this
-order: the process environment, a `.env` in the current working directory, then
-the shared `.env` in the tooling home (chmod 600, written by `ws-skills setup`).
-
-Output paths default to the current working directory, so each project collects
-into its own `references/raw-source/` unless WS_OUTPUT_DIR says otherwise.
+Settings resolve in this order: the process environment, a `.env` in the current
+working directory, then the shared `.env` in the tooling home. Output paths
+default to the current working directory unless WS_OUTPUT_DIR says otherwise.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -66,6 +64,28 @@ def raw_source() -> Path:
     return Path(lookup("WS_OUTPUT_DIR") or Path.cwd() / "references" / "raw-source")
 
 
+_GITIGNORE = (
+    "# Written by ws-skills. Fetched workspace material is not for a commit.\n"
+    "# Delete this file if these snapshots really do belong in the repository.\n"
+    "*\n"
+)
+
+
+def ensure_output_dir(directory: Path) -> Path:
+    """Create an output directory and keep what lands in it out of git.
+
+    An existing .gitignore is never touched.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    guard = directory / ".gitignore"
+    if not guard.exists():
+        try:
+            guard.write_text(_GITIGNORE, encoding="utf-8")
+        except OSError as err:
+            print(f"[ws] could not write {guard}: {err}", file=sys.stderr)
+    return directory
+
+
 def notes() -> Path:
     return Path(lookup("WS_NOTES_DIR") or Path.cwd() / "references" / "working-notes")
 
@@ -86,11 +106,13 @@ def slack_state_file() -> Path:
 def unique_path(directory: Path, name: str) -> Path:
     """`name` inside `directory`, suffixed until it does not collide.
 
-    Two runs on the same day used to overwrite each other; a narrower re-run
-    silently replacing a wider earlier one destroys material already retrieved.
+    Split on the last dot: a document title carries dots of its own, and
+    splitting on the first one would move half the title into the extension.
     """
-    directory.mkdir(parents=True, exist_ok=True)
-    stem, dot, ext = name.partition(".")
+    ensure_output_dir(directory)
+    stem, dot, ext = name.rpartition(".")
+    if not dot:
+        stem, ext = name, ""
     out = directory / name
     seq = 2
     while out.exists():

@@ -7,16 +7,21 @@ import {
   configHome,
   envFile,
   googleDir,
-  installedSkillsDir,
+  skillDir,
+  skillToolsLink,
+  skillsDir,
   slackDir,
   tildify,
-  toolsCommand,
   toolsDir,
 } from '../lib/paths.mjs';
-import { SKILLS, linkStatus } from '../lib/skills.mjs';
+import { SKILLS, skillStatus } from '../lib/skills.mjs';
 import { playwrightBrowsersInstalled, pythonVersion, uvVersion, UV_INSTALL_HINT } from '../lib/prereq.mjs';
 import { configuredIntegrations } from './setup.mjs';
-import { bad, bold, dim, heading, info, ok, warn } from '../lib/ui.mjs';
+import { bad, bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../lib/ui.mjs';
+
+const RUN_AUTH = 'npx @masanao-ohba/ws-skills auth';
+
+const RUN_SETUP = 'npx @masanao-ohba/ws-skills setup';
 
 async function checkTooling() {
   heading('Tooling');
@@ -33,37 +38,48 @@ async function checkTooling() {
 }
 
 async function checkInstall() {
-  heading(`Install home ${dim(tildify(configHome()))}`);
+  heading(`Skills ${dim(tildify(skillsDir()))}`);
   let problems = 0;
 
   if (await exists(path.join(toolsDir(), 'main.py'))) {
-    ok(`tools at ${tildify(toolsDir())}`);
+    ok(`tooling at ${tildify(toolsDir())}`);
   } else {
-    bad(`tools missing — run ${bold('npx @masanao-ohba/ws-skills install')}`);
+    bad(`tooling missing — run ${bold('npx @masanao-ohba/ws-skills')}`);
     problems += 1;
   }
 
   for (const skill of SKILLS) {
-    const installed = await exists(path.join(installedSkillsDir(), skill.name, 'SKILL.md'));
-    const status = await linkStatus(skill.name);
-    if (!installed) {
-      bad(`${skill.name}: not installed`);
+    const status = await skillStatus(skill.name);
+    if (status.state === 'absent') {
+      bad(`/${skill.name}: not installed`);
       problems += 1;
-    } else if (status.state === 'ours') {
-      ok(`/${skill.name} ${dim(`-> ${tildify(status.want)}`)}`);
-    } else if (status.state === 'absent') {
-      warn(`/${skill.name} not linked into ${tildify(path.dirname(status.link))}`);
+      continue;
+    }
+    if (status.state !== 'ours') {
+      warn(`/${skill.name}: ${tildify(status.dir)} is not one of ours`);
+      problems += 1;
+      continue;
+    }
+    if (!(await exists(path.join(skillDir(skill.name), 'SKILL.md')))) {
+      bad(`/${skill.name}: SKILL.md missing`);
+      problems += 1;
+      continue;
+    }
+    // Every command in SKILL.md runs through this link.
+    if (await exists(path.join(skillToolsLink(skill.name), 'main.py'))) {
+      ok(`/${skill.name}`);
     } else {
-      warn(`/${skill.name} points somewhere else: ${tildify(status.target)}`);
+      bad(`/${skill.name}: ${tildify(skillToolsLink(skill.name))} does not reach the tooling`);
+      problems += 1;
     }
   }
   return problems;
 }
 
 async function checkSettings(values) {
-  heading(`Settings ${dim(tildify(envFile()))}`);
+  heading(`Credentials ${dim(tildify(configHome()))}`);
   if (!(await exists(envFile()))) {
-    bad(`no settings file — run ${bold('ws-skills setup')}`);
+    bad(`no settings file — run ${bold(RUN_SETUP)}`);
     return 1;
   }
   const mode = (await fs.stat(envFile())).mode & 0o777;
@@ -107,7 +123,7 @@ async function checkGoogle(values) {
       problems += 1;
     }
     if (await exists(token)) ok(`${profile}: read-only token present`);
-    else warn(`${profile}: not authorized yet — run ${dim(`${toolsCommand()} auth --profile ${profile}`)}`);
+    else warn(`${profile}: not authorized yet — run ${bold(RUN_AUTH)}`);
 
     for (const service of ['sheets', 'docs']) {
       if (await exists(path.join(googleDir(), `token_${service}${suffix}.json`))) {
@@ -132,23 +148,20 @@ async function checkSlack(values) {
       bad('SLACK_TOKEN is not set');
       problems += 1;
     }
+  } else if (values.SLACK_FROM_APP === '1') {
+    // Nothing of ours to check: only the app itself knows whether it is signed in.
+    ok('using the Slack desktop app session (keep the app signed in)');
   } else {
     if (await exists(path.join(slackDir(), 'state.json'))) ok('saved browser session present');
     else if (values.SLACK_EMAIL && values.SLACK_PASSWORD) {
       warn('no saved session yet — the first run will log in and save one');
     } else {
-      bad(
-        `no saved session and no stored login — run ` +
-          dim(`${toolsCommand()} slack-signin --url https://<workspace>.slack.com/`),
-      );
+      bad(`no saved session and no stored login — run ${bold(RUN_AUTH)}`);
       problems += 1;
     }
     if (await playwrightBrowsersInstalled()) ok('Playwright browsers installed');
     else {
-      bad(
-        `Chromium not installed — run ` +
-          dim(`uv run --project ${tildify(toolsDir())} python -m playwright install chromium`),
-      );
+      bad(`Chromium not installed — run ${bold(RUN_AUTH)}`);
       problems += 1;
     }
   }
@@ -159,7 +172,7 @@ async function checkSlack(values) {
 }
 
 export async function doctorCommand() {
-  console.log(bold('\nws-skills doctor'));
+  flowStart('ws-skills doctor');
   const values = await readEnvFile(envFile());
   const integrations = configuredIntegrations(values);
 
@@ -171,11 +184,12 @@ export async function doctorCommand() {
   if (integrations.includes('google')) problems += await checkGoogle(values);
   if (integrations.includes('slack')) problems += await checkSlack(values);
 
-  console.log('');
-  if (problems === 0) {
-    ok('everything the selected integrations need is in place');
-    return 0;
-  }
-  warn(problems === 1 ? '1 item still needs attention' : `${problems} items still need attention`);
-  return 1;
+  flowEnd(
+    problems === 0
+      ? 'everything the selected integrations need is in place'
+      : problems === 1
+        ? '1 item still needs attention'
+        : `${problems} items still need attention`,
+  );
+  return problems === 0 ? 0 : 1;
 }

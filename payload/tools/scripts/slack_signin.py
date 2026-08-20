@@ -1,8 +1,7 @@
 """Sign in to a Slack workspace by hand, once, and keep the session.
 
-Use this when the scripted login does not apply — a workspace behind Google sign-in,
-or one that always asks for a second factor. A browser window opens, a person
-completes the sign-in, and every later run is unattended.
+For when the scripted login does not apply — a workspace behind Google sign-in, or
+one that always asks for a second factor. Every later run is then unattended.
 
     <tools> slack-signin --url https://<workspace>.slack.com/
 

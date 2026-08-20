@@ -1,8 +1,5 @@
-"""Write a Slack conversation snapshot — one shape for both backends.
-
-The browser backend and the API backend produce the same envelope and the same
-per-message keys, so anything reading a snapshot never has to care which one
-collected it. `backend` records which did.
+"""Write a Slack conversation snapshot — one envelope and one message shape for
+both backends, with `backend` recording which one collected it.
 """
 
 from __future__ import annotations
@@ -18,6 +15,11 @@ def count_replies(messages: list[dict]) -> int:
     return sum(len(m.get("thread_replies") or []) for m in messages)
 
 
+def count_thread_failures(messages: list[dict]) -> int:
+    """Threads that could not be read — replies that are missing, not absent."""
+    return sum(1 for m in messages if m.get("thread_replies_failed"))
+
+
 def write_snapshot(
     messages: list[dict],
     *,
@@ -31,6 +33,7 @@ def write_snapshot(
     stamp = datetime.now(tz=timezone.utc)
     name = f"slack-{label or channel_id}-{stamp.strftime('%Y%m%d')}.json"
     out = ws_paths.unique_path(ws_paths.raw_source(), name)
+    failures = count_thread_failures(messages)
 
     out.write_text(
         json.dumps(
@@ -44,6 +47,9 @@ def write_snapshot(
                 "fetched_at": stamp.isoformat(),
                 "message_count": len(messages),
                 "thread_reply_count": count_replies(messages),
+                # Always present, including as 0, so "none failed" reads differently
+                # from "this snapshot predates the count".
+                "thread_failure_count": failures,
                 "messages": messages,
             },
             ensure_ascii=False,
@@ -57,4 +63,10 @@ def write_snapshot(
         f"[slack] {len(messages)} messages + {count_replies(messages)} thread replies "
         f"({span}) -> {out}"
     )
+    if failures:
+        # Last line of the run: the snapshot is incomplete.
+        print(
+            f"[slack] WARNING: {failures} thread(s) could not be read and are marked "
+            '"thread_replies_failed" in the snapshot. Re-run to collect them.'
+        )
     return out

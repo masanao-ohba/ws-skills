@@ -1,7 +1,4 @@
-"""Append text to the end of a Google Doc.
-
-Uses the separate Docs write token; the read-only token the fetch commands hold is
-never touched.
+"""Append text to the end of a Google Doc, using the separate Docs write token.
 
     <tools> gdoc-append <DOC_ID_OR_URL> --text "text to append"
     <tools> gdoc-append <DOC_ID_OR_URL> --file notes.md
@@ -37,8 +34,8 @@ def append(
     creds = google_auth.get_credentials(profile, write="docs")
     service = build("docs", "v1", credentials=creds, cache_discovery=False)
     doc_id = _doc_id(doc_ref)
-    # The last structural element's endIndex includes the trailing newline, which
-    # cannot be inserted at — insert just before it.
+    # The last element's endIndex covers the trailing newline, which cannot be
+    # inserted at — insert just before it.
     doc = service.documents().get(documentId=doc_id, fields="body(content(endIndex)),title").execute()
     end = doc["body"]["content"][-1]["endIndex"] - 1
     service.documents().batchUpdate(

@@ -13,7 +13,7 @@ directory (override with WS_OUTPUT_DIR), so each project collects its own materi
     uv run python main.py gsheet-write <SHEET> --range 'Tab!A1' --values '[["a"]]'
     uv run python main.py gdoc-append <DOC> --text "..."
 
-    uv run python main.py slack --channel C0123456789 --since 2026-04-01
+    uv run python main.py slack --channel release --since 2026-04-01
     uv run python main.py channels --query release
     uv run python main.py slack-signin --url https://<workspace>.slack.com/
 
@@ -97,7 +97,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_cal.add_argument("--profile", default="default", help="Google account profile")
 
     p_slack = sub.add_parser("slack", help="collect a Slack channel or DM")
-    p_slack.add_argument("--channel", required=True, help="channel/DM ID, e.g. C0123456789")
+    p_slack.add_argument(
+        "--channel",
+        required=True,
+        help="channel name (release, #release) or ID (C0123456789). A name is looked "
+        "up once per workspace and remembered",
+    )
     p_slack.add_argument("--label", help="short name used in the output filename")
     p_slack.add_argument("--backend", choices=["api", "browser"], help="default: api if SLACK_TOKEN is set")
     p_slack.add_argument(
@@ -118,10 +123,20 @@ def build_parser() -> argparse.ArgumentParser:
         "scripted login. Required for a workspace that signs in through Google (macOS only)",
     )
 
-    p_ch = sub.add_parser("channels", help="list conversations with their IDs")
+    p_ch = sub.add_parser(
+        "channels",
+        help="list conversations with their IDs (to look one name up, pass it to "
+        "`slack --channel` directly)",
+    )
     p_ch.add_argument("--query", help="case-insensitive substring filter on the name")
     p_ch.add_argument("--backend", choices=["api", "browser"])
     p_ch.add_argument("--headless", action="store_true", help="browser backend: run without a visible window")
+    p_ch.add_argument("--team-id", help="workspace team ID; defaults to SLACK_TEAM_ID")
+    p_ch.add_argument(
+        "--from-app",
+        action="store_true",
+        help="browser backend: use the Slack desktop app's live session",
+    )
 
     p_si = sub.add_parser("slack-signin", help="sign in to a Slack workspace by hand and save the session")
     p_si.add_argument("--url", required=True, help="https://<workspace>.slack.com/")
@@ -215,15 +230,31 @@ def main() -> None:
     elif args.command == "slack":
         import fetch_slack
 
+        channel_id = fetch_slack.resolve_channel(
+            args.channel,
+            team_id=args.team_id,
+            headless=args.headless,
+            from_app=args.from_app,
+            backend=args.backend,
+        )
+        # Asked for by name, filed under that name rather than the ID.
+        import slack_channels
+
+        label = args.label
+        if not label and not slack_channels.looks_like_id(args.channel):
+            label = slack_channels.normalize(args.channel)
+
         fetch_slack.fetch(
-            args.channel, args.label, args.headless, args.since, args.team_id,
+            channel_id, label, args.headless, args.since, args.team_id,
             args.from_app, args.backend,
         )
 
     elif args.command == "channels":
         import fetch_slack
 
-        fetch_slack.list_channels(args.query, args.headless, args.backend)
+        fetch_slack.list_channels(
+            args.query, args.headless, args.backend, args.team_id, args.from_app
+        )
 
     elif args.command == "slack-signin":
         import slack_signin
@@ -231,12 +262,12 @@ def main() -> None:
         slack_signin.signin(args.url)
 
     elif args.command == "backlog":
-        import backlog_client
+        import explore_backlog
         import fetch_backlog
 
         try:
             fetch_backlog.fetch(args.issue)
-        except backlog_client.BacklogError as e:
+        except explore_backlog.BacklogError as e:
             sys.exit(str(e))
 
     elif args.command == "bl-digest":

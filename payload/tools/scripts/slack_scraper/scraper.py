@@ -92,7 +92,9 @@ def collect(page: Page, team_id: str, channel_id: str, since: str | None = None)
     threaded = [m for m in messages if m.has_thread and m.slack_ts]
     if threaded:
         print(f"[slack] fetching {len(threaded)} threads")
-        fetch_all_threads(page, team_id, channel_id, threaded)
+        failed = fetch_all_threads(page, team_id, channel_id, threaded)
+        if failed:
+            print(f"[slack] WARNING: {failed} of {len(threaded)} threads could not be read")
 
     return messages
 
@@ -130,29 +132,45 @@ def dedup_key(msg: Message) -> str:
     return f"{msg.timestamp}|{msg.sender}|{msg.text[:50]}"
 
 
+# Opening a thread fails intermittently — the panel is slow, and one attempt in
+# a run or two runs out of patience. Observed cost of not retrying: a thread with
+# six replies recorded as having none.
+THREAD_ATTEMPTS = 3
+
+
 def fetch_all_threads(
     page: Page, team_id: str, channel_id: str, threaded_msgs: list[Message]
-) -> None:
-    """Open each thread and collect its replies."""
+) -> int:
+    """Open each thread and collect its replies. Returns how many could not be read."""
+    failed = 0
     for i, msg in enumerate(threaded_msgs):
         print(f"[thread] ({i + 1}/{len(threaded_msgs)}) opening thread at {msg.timestamp}")
 
-        try:
-            if not navigate_to_thread(page, team_id, channel_id, msg.slack_ts):
-                print("[thread]   -> thread list not found, skipping")
-                continue
+        for attempt in range(1, THREAD_ATTEMPTS + 1):
+            try:
+                if navigate_to_thread(page, team_id, channel_id, msg.slack_ts):
+                    scroll_thread_panel(page)
+                    msg.thread_replies = extract_thread_replies(page)
+                    print(f"[thread]   -> {len(msg.thread_replies)} replies collected")
+                    break
+                reason = "the thread panel did not open"
+            except (PwTimeout, Exception) as e:
+                reason = str(e)
 
-            scroll_thread_panel(page)
-            msg.thread_replies = extract_thread_replies(page)
-            print(f"[thread]   -> {len(msg.thread_replies)} replies collected")
-
-        except (PwTimeout, Exception) as e:
-            print(f"[thread]   -> failed: {e}")
-            continue
+            if attempt < THREAD_ATTEMPTS:
+                print(f"[thread]   -> {reason}; retrying ({attempt}/{THREAD_ATTEMPTS})")
+                human_delay(1.5, 2.5)
+            else:
+                # Recorded on the message as well as printed: a run nobody watched
+                # must not leave a gap that reads as an empty thread.
+                msg.thread_failed = True
+                failed += 1
+                print(f"[thread]   -> gave up after {THREAD_ATTEMPTS} attempts: {reason}")
 
         human_delay(0.5, 1.0)
 
     navigate_to_conversation(page, team_id, channel_id)
+    return failed
 
 
 def scroll_thread_panel(page: Page, max_iterations: int = 40) -> None:

@@ -11,8 +11,8 @@ the user through the credentials each one needs.
 Two languages, one job each:
 
 - **Node (`bin/`, `src/`)** — the installer only. Zero runtime dependencies, so
-  `npx` starts immediately. It copies `payload/` into the install home, symlinks
-  the skills into `~/.claude/skills/`, and writes `.env`.
+  `npx` starts immediately. It copies `payload/` into `~/.claude/skills/` and writes
+  the credentials into `~/.config/ws-skills/`.
 - **Python (`payload/tools/`)** — everything that touches an API. Run through `uv`;
   the user never installs Python packages by hand.
 
@@ -21,24 +21,34 @@ Two languages, one job each:
 ```
 bin/cli.mjs              entry point
 src/cli.mjs              argument parsing and dispatch
-src/commands/            install, setup, link, doctor, uninstall
-src/lib/                 paths, prompts, .env rendering, symlinks, prerequisites
+src/commands/            install, setup, auth, link, doctor, uninstall
+src/lib/                 paths, prompts, .env rendering, skill installation,
+                         prerequisites, and tools.mjs — the only place that
+                         spawns the Python CLI
 payload/skills/<name>/SKILL.md   what Claude reads
 payload/tools/main.py            the CLI's argparse surface
 payload/tools/scripts/           one module per source; slack_scraper/ is vendored
 test/                    node:test for the installer
-payload/tools/tests/     unittest for the Slack API backend's normalization
+payload/tools/tests/     unittest for output paths, channel resolution, and the
+                         Slack API backend's normalization
 ```
 
 After installation:
 
 ```
-~/.config/ws-skills/{tools,skills,google,slack,.env}
-~/.claude/skills/ws-*  ->  ~/.config/ws-skills/skills/ws-*   (symlinks)
+~/.claude/skills/ws-skills-tools/       the Python CLI, one shared copy
+~/.claude/skills/ws-*/SKILL.md          the skill
+~/.claude/skills/ws-*/tools  ->  ../ws-skills-tools
+~/.config/ws-skills/{google,slack,.env} credentials and settings only
 ```
 
-The install home must never be inside the package: `npx` unpacks into a cache that
-gets wiped, and the symlinks have to keep pointing at something that stays.
+A skill carries the code it runs, so every command a SKILL.md documents is a path
+inside that skill — nothing has to go looking through a config directory to find
+the implementation. The tooling is shared rather than copied per skill because the
+virtualenv uv builds runs to hundreds of megabytes.
+
+Neither location may be inside the package: `npx` unpacks into a cache that gets
+wiped, and what is installed has to outlive it.
 
 ## Rules that hold across the codebase
 
@@ -51,12 +61,29 @@ gets wiped, and the symlinks have to keep pointing at something that stays.
   saying so loudly in the skill docs.
 - **Secrets are chmod 600**, live only under the install home, and are never echoed
   by a prompt or printed by `doctor`.
-- **Both Slack backends emit the same snapshot shape** (`slack_output.write_snapshot`).
-  If one gains a field, either give the other the same field or document the gap in
-  `payload/skills/ws-slack/SKILL.md` and the README.
+- **Both Slack backends emit the same snapshot shape** (`slack_output.write_snapshot`),
+  down to the per-message fields. The differences are structural, not accidental:
+  `thread_replies_failed` is browser-only (an API read that fails raises rather than
+  returning a thread with its replies missing), `inline_emoji` is browser-only (the
+  API renders emoji into the text), and `user_id` is API-only (the DOM does not
+  carry user ids).
+- **A partial collection says it is partial.** Scraping a thread fails now and then;
+  retrying is not enough on its own, because a run nobody watched still has to leave
+  the gap visible in the file. Anything that can come back short belongs in the
+  snapshot as a count, not only in the log.
 - **Output never overwrites.** Snapshots get a numeric suffix rather than replacing
-  an earlier, possibly wider, collection.
+  an earlier, possibly wider, collection. The output directory is created with its
+  own `.gitignore`, so fetched material cannot ride along in a commit.
+- **A channel name is a first-class argument.** `--channel` accepts a name or an ID,
+  and both Slack backends resolve names (`slack_channels.resolve` caches the answer
+  per workspace). Nothing in the skills should send the reader hunting for an ID by
+  other means — that is what the old sidebar sweep forced, and it cost minutes a run.
 - **English everywhere** in the package: code, comments, docs, prompts.
+- **The Python CLI is not a user surface.** People drive `npx @masanao-ohba/ws-skills`;
+  Claude drives `main.py` through the skills. Anything a person has to do — a consent
+  screen, a sign-in, a browser download — is run *for* them by `commands/auth.mjs`, never
+  printed as a command to copy. Keep raw `uv run …` lines out of the README, out of the
+  installer's output, and out of what the skills tell users to do.
 
 ## Testing
 
@@ -67,10 +94,10 @@ npm test    # node:test installer suite + Python fixture tests
 The installer tests run against a throwaway `WS_SKILLS_HOME` / `CLAUDE_CONFIG_DIR`,
 so they never touch the developer's real Claude Code config. Keep it that way.
 
-The Slack **API** backend has not been verified against a live workspace. Its
-normalization is therefore fixture-driven — any change
-to `slack_api.py` needs a matching case in `payload/tools/tests/test_slack_api.py`,
-and the "not verified against a live workspace" note in the README stays until it is.
+The Slack **API** backend's normalization is fixture-driven — any change to
+`slack_api.py` needs a matching case in `payload/tools/tests/test_slack_api.py`.
+It has been verified against a live workspace (a basic channel fetch with a
+user token); the fixtures remain the regression net.
 
 `payload/tools/scripts/slack_scraper/` is vendored from
 [masanao-ohba/slack-backup](https://github.com/masanao-ohba/slack-backup); keep
@@ -81,3 +108,10 @@ changes there small and portable back upstream.
 `payload/tools/uv.lock` is committed and shipped; `.venv` and `__pycache__` are
 excluded from both git and the tarball. Check `npm pack --dry-run` before
 publishing — the `files` allowlist plus `.npmignore` decide what ships.
+
+No test code ships. The Node suite is left out by omission (`test/` is not in
+`files`); the Python suite needs the explicit `!payload/tools/tests` negation,
+because `payload` is listed wholesale. Exclusions inside a directory that
+`files` names have to be written as a `files` negation or a nested `.npmignore` —
+the root `.npmignore` does not reach in there, which is also why `prepack`
+clears `__pycache__` rather than leaving it to the ignore file.

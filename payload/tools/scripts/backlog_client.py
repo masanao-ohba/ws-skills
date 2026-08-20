@@ -1,20 +1,14 @@
 """Read-only Backlog API client with per-project credential resolution.
 
-More than one key can coexist — your own, plus keys shared with you that reach a
-single project. A borrowed credential must never leak into calls for another
-project, so the key is resolved from the project key rather than from one global
-variable:
+A key is resolved from the project key, so a credential scoped to one project
+never reaches calls for another:
 
     BACKLOG_DOMAIN               space host, e.g. yourspace.backlog.jp
     BACKLOG_API_KEY              default key
     BACKLOG_API_KEY_<PROJECT>    used for every call on that project, e.g. ..._ABC123
     BACKLOG_DOMAIN_<PROJECT>     only if that project lives in another space (optional)
 
-Values resolve from the process environment first, then `.env` in the current
-directory, then the shared `.env` in the tooling home.
-
-**Read-only by construction**: this module issues GET only. There is no
-POST/PATCH/DELETE path here, so a key cannot be used to write even by mistake.
+**Read-only by construction**: this module issues GET only.
 """
 
 from __future__ import annotations
@@ -47,7 +41,6 @@ class Backlog:
             "BACKLOG_DOMAIN"
         )
         self.key = ws_paths.lookup(f"BACKLOG_API_KEY_{self.project_key}")
-        self.scoped = self.key is not None
         if self.key is None:
             self.key = ws_paths.lookup("BACKLOG_API_KEY")
         if not self.domain or not self.key:
@@ -67,8 +60,7 @@ class Backlog:
         flat.append(("apiKey", self.key))
         url = f"https://{self.domain}/api/v2/{path}?{urllib.parse.urlencode(flat)}"
         req = urllib.request.Request(url, method="GET")
-        # Backlog rate-limits per API key; exploration paginates, so back off rather
-        # than aborting a half-collected sweep.
+        # Backlog rate-limits per API key.
         for attempt in range(5):
             try:
                 with urllib.request.urlopen(req, timeout=30) as r:
@@ -85,8 +77,7 @@ class Backlog:
     def paged(self, path: str, limit: int | None = None, **params) -> list:
         """Walk an offset-paginated collection endpoint, stopping at `limit` items.
 
-        `limit` is enforced *while* paging, not by slicing afterwards: a project with
-        thousands of issues would otherwise be walked in full for a 5-row listing.
+        `limit` is enforced while paging, not by slicing afterwards.
         """
         out: list = []
         offset = 0

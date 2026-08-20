@@ -1,119 +1,185 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { ensureDir, syncDir } from '../lib/fsx.mjs';
+import { authorize } from './auth.mjs';
+import { ensureDir, exists, syncDir } from '../lib/fsx.mjs';
 import { confirm, interactive } from '../lib/prompt.mjs';
 import {
   configHome,
-  installedSkillsDir,
+  legacySkillsDir,
+  legacyToolsDir,
   packageRoot,
+  skillsDir,
   tildify,
-  toolsCommand,
   toolsDir,
 } from '../lib/paths.mjs';
-import { SKILLS, linkSkill } from '../lib/skills.mjs';
+import { SKILLS, installSkill } from '../lib/skills.mjs';
 import { UV_INSTALL_HINT, uvVersion } from '../lib/prereq.mjs';
-import { bad, bold, dim, heading, info, ok, step, warn } from '../lib/ui.mjs';
+import { bad, bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../lib/ui.mjs';
 import { runWizard } from './setup.mjs';
+
+/**
+ * Carry the virtualenv over from an install made by an earlier version.
+ *
+ * If the move cannot be done (a different filesystem), uv rebuilds it on first
+ * run. The old layout itself stays until `removeLegacyInstall`, after the skills
+ * are installed — the entries an earlier version made are symlinks into it.
+ */
+async function carryLegacyVenv() {
+  if (!(await exists(legacyToolsDir()))) return;
+
+  const from = path.join(legacyToolsDir(), '.venv');
+  const to = path.join(toolsDir(), '.venv');
+  if ((await exists(from)) && !(await exists(to))) {
+    await ensureDir(toolsDir());
+    try {
+      await fs.rename(from, to);
+    } catch {
+      warn('could not move the Python virtualenv — uv will rebuild it on the first run');
+    }
+  }
+}
+
+/**
+ * Delete the old layout, and every ~/.claude/skills entry still pointing into it.
+ *
+ * A skill chosen this run is already migrated by `installSkill` before this
+ * runs, so it is no longer a legacy symlink here. Anything still a legacy
+ * symlink was not chosen this run — ask before removing it, since that
+ * removes a skill the user did not just decide to drop. The old shared
+ * layout (`legacyToolsDir`/`legacySkillsDir`) is only deleted once nothing
+ * still points into it.
+ */
+async function removeLegacyInstall() {
+  if (!(await exists(legacyToolsDir())) && !(await exists(legacySkillsDir()))) return;
+
+  let remaining = false;
+  for (const skill of SKILLS) {
+    const entry = path.join(skillsDir(), skill.name);
+    const target = await fs.readlink(entry).catch(() => null);
+    if (!target || !path.resolve(path.dirname(entry), target).startsWith(configHome() + path.sep)) {
+      continue;
+    }
+
+    const remove =
+      interactive() &&
+      (await confirm(`  /${skill.name} is still the previous version's link — remove it?`, false));
+    if (remove) {
+      await fs.rm(entry, { force: true });
+    } else {
+      warn(`/${skill.name}: left as the previous version's link (re-select it next time to migrate)`);
+      remaining = true;
+    }
+  }
+
+  if (remaining) return;
+
+  await fs.rm(legacyToolsDir(), { recursive: true, force: true });
+  await fs.rm(legacySkillsDir(), { recursive: true, force: true });
+  info(dim(`moved the previous install out of ${tildify(configHome())}`));
+}
 
 async function copyPayload() {
   const root = packageRoot();
+  // The config home holds credentials now, nothing executable.
   await ensureDir(configHome(), 0o700);
-  // .venv is uv's, not ours — wiping it would re-download every dependency.
+  await carryLegacyVenv();
+  // .venv is uv's, not ours.
   await syncDir(path.join(root, 'payload', 'tools'), toolsDir(), { keep: ['.venv'] });
-  await syncDir(path.join(root, 'payload', 'skills'), installedSkillsDir());
-  ok(`tools and skills installed under ${tildify(configHome())}`);
+  ok(`tooling installed at ${tildify(toolsDir())}`);
 }
 
-async function linkChosen(integrations, { force }) {
+async function installChosen(integrations, { force }) {
   const wanted = SKILLS.filter((s) => integrations.includes(s.integration));
+  const source = path.join(packageRoot(), 'payload', 'skills');
   const conflicts = [];
 
   for (const skill of wanted) {
-    let result = await linkSkill(skill.name, { force });
+    const from = path.join(source, skill.name);
+    let result = await installSkill(skill.name, from, { force });
 
     if (result.action === 'conflict' && interactive()) {
-      warn(`${skill.name}: something else is already at ${tildify(result.link)}`);
-      if (await confirm(`  move it aside and link /${skill.name}?`, true)) {
-        result = await linkSkill(skill.name, { force: true });
+      warn(`${skill.name}: something else is already at ${tildify(result.dir)}`);
+      if (await confirm(`  move it aside and install /${skill.name}?`, true)) {
+        result = await installSkill(skill.name, from, { force: true });
       }
     }
 
     if (result.action === 'conflict') {
       conflicts.push(skill.name);
-      bad(`/${skill.name}: left alone (${tildify(result.link)} already exists)`);
+      bad(`/${skill.name}: left alone (${tildify(result.dir)} already exists)`);
     } else if (result.action === 'replaced') {
-      ok(`/${skill.name} linked ${dim(`(previous copy kept at ${path.basename(result.backup)})`)}`);
-    } else if (result.action === 'linked') {
-      ok(`/${skill.name} linked`);
+      ok(
+        `/${skill.name} installed ${dim(`(previous copy kept at ${tildify(result.backup)})`)}`,
+      );
+    } else if (result.action === 'migrated') {
+      ok(`/${skill.name} installed ${dim('(replacing the link an earlier version made)')}`);
+    } else if (result.action === 'updated') {
+      ok(`/${skill.name} up to date`);
     } else {
-      ok(`/${skill.name} already linked`);
+      ok(`/${skill.name} installed`);
     }
   }
 
   const skipped = SKILLS.filter((s) => !integrations.includes(s.integration));
   for (const skill of skipped) {
-    info(dim(`/${skill.name} not linked (integration not selected)`));
+    info(dim(`/${skill.name} not installed (integration not selected)`));
   }
   return conflicts;
 }
 
-function nextSteps(integrations) {
-  const cmd = toolsCommand();
+const EXAMPLES = {
+  backlog: '/ws-backlog  snapshot issue ABC123-45',
+  slack: '/ws-slack    save #release since 2026-04-01',
+  google: '/ws-google   fetch <doc url> and list the comments nobody resolved',
+};
+
+function nextSteps(integrations, pending) {
   heading('Next steps');
 
-  if (!uvVersion()) {
-    bad(UV_INSTALL_HINT);
+  if (!uvVersion()) bad(UV_INSTALL_HINT);
+  if (pending.length) {
+    warn('still to do:');
+    for (const item of pending) info(`  - ${item}`);
+    info(dim(`  run ${bold('npx @masanao-ohba/ws-skills auth')} to pick these up`));
+    info('');
   }
 
-  info(`The skills run this command; nothing else needs to be on your PATH:`);
-  info(dim(`  ${cmd} --help`));
-
-  if (integrations.includes('google')) {
-    info('');
-    info(`${bold('Google')}: authorize the read-only token (and the write tokens you need)`);
-    info(dim(`  ${cmd} auth`));
-    info(dim(`  ${cmd} auth --write sheets`));
-    info(dim(`  ${cmd} auth --check`));
-  }
-  if (integrations.includes('slack')) {
-    info('');
-    info(`${bold('Slack')}: for the browser backend, install Chromium once and save a session`);
-    info(dim(`  uv run --project ${tildify(toolsDir())} python -m playwright install chromium`));
-    info(dim(`  ${cmd} slack-signin --url https://<workspace>.slack.com/`));
-  }
-  if (integrations.includes('backlog')) {
-    info('');
-    info(`${bold('Backlog')}: ready — try`);
-    info(dim(`  ${cmd} bl-explore overview --project <PROJECT>`));
-  }
-
-  info('');
-  info('In Claude Code, the skills are available as ' + SKILLS.map((s) => `/${s.name}`).join(', '));
-  info(dim('  (start a new session to pick them up)'));
-  info(`Check anything that is still missing with ${dim('ws-skills doctor')}`);
+  info('Start a new Claude Code session, then ask for what you need:');
+  for (const integration of integrations) info(dim(`  ${EXAMPLES[integration]}`));
+  flowEnd(`check anything still missing with ${bold('npx @masanao-ohba/ws-skills doctor')}`);
 }
 
 export async function installCommand({ force = false, skipSetup = false } = {}) {
-  console.log(bold('\nws-skills'));
+  flowStart('ws-skills');
   info('Installs the ws-* Claude Code skills and the tooling behind them.');
-  info(dim(`install home: ${tildify(configHome())}`));
+  info(dim(`skills: ${tildify(skillsDir())}`));
+  info(dim(`credentials: ${tildify(configHome())}`));
 
-  step('Copying the tools and skills');
+  heading('Copying the tooling');
   await copyPayload();
 
-  step('Credentials');
-  const { integrations } = skipSetup
-    ? { integrations: SKILLS.map((s) => s.integration) }
-    : await runWizard();
+  heading('Credentials');
+  const wizard = skipSetup ? null : await runWizard();
+  const integrations = wizard ? wizard.integrations : SKILLS.map((s) => s.integration);
 
-  step('Linking the skills into Claude Code');
-  const conflicts = await linkChosen(integrations, { force });
+  heading('Installing the skills into Claude Code');
+  const conflicts = await installChosen(integrations, { force });
+  await removeLegacyInstall();
 
-  nextSteps(integrations);
+  // Credentials collected is not the same as authorized: Google needs a consent
+  // flow and Slack may need a sign-in, both interactive.
+  let pending = [];
+  if (wizard && interactive()) {
+    heading('Authorization');
+    pending = await authorize(wizard.values);
+  }
+
+  nextSteps(integrations, pending);
 
   if (conflicts.length) {
     warn(
-      `not linked: ${conflicts.map((c) => `/${c}`).join(', ')} — ` +
+      `not installed: ${conflicts.map((c) => `/${c}`).join(', ')} — ` +
         're-run with --force to move the existing entries aside',
     );
     return 1;

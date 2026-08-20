@@ -1,116 +1,85 @@
 # ws-skills
 
-Three [Claude Code](https://claude.com/claude-code) skills for pulling work
-material out of the tools a team actually leaves its history in — and, for Google,
-putting some back:
+**Three [Claude Code](https://claude.com/claude-code) skills that fetch your team's
+working history out of Google Workspace, Slack and Backlog — and, for Google, write
+some back.** One `npx` command installs them and takes you through every credential
+they need.
 
-| skill | what it does |
-|---|---|
-| `/ws-google` | Google Docs → Markdown, Sheets → JSON, Drive comment threads, Calendar ranges. Writes cell values and appends to Docs, through separate write tokens. |
-| `/ws-slack` | Channels, DMs and thread replies → JSON, through the Slack Web API **or** browser automation when your workspace does not hand out tokens. |
-| `/ws-backlog` | Backlog issues with every comment, project overviews, issue search, wikis, activities. Read-only by construction. |
-
-Everything retrieved is written to `references/raw-source/` under whatever
-directory you run from, so each project accumulates its own material. Nothing is
-uploaded anywhere; credentials stay in `~/.config/ws-skills`, chmod 600.
-
-## Install
+[![npm](https://img.shields.io/npm/v/@masanao-ohba/ws-skills?logo=npm&color=cb3837)](https://www.npmjs.com/package/@masanao-ohba/ws-skills)
+[![node](https://img.shields.io/badge/node-%E2%89%A518.17-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
+[![python via uv](https://img.shields.io/badge/python-via%20uv-DE5FE9?logo=python&logoColor=white)](https://docs.astral.sh/uv/)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ```bash
 npx @masanao-ohba/ws-skills
 ```
 
-That copies the tooling to `~/.config/ws-skills`, symlinks the three skills into
-`~/.claude/skills/`, and walks you through the credentials each one needs. Start a
-new Claude Code session afterwards and `/ws-google`, `/ws-slack` and `/ws-backlog`
-are available.
+---
 
-Requirements: **Node 18.17+** to run the installer, and **[uv](https://docs.astral.sh/uv/)**
-to run the Python side (`brew install uv`, or `curl -LsSf https://astral.sh/uv/install.sh | sh`).
-uv fetches its own Python, so you do not need one installed.
+## What you get
 
-```
-~/.config/ws-skills/
-├── tools/          the CLI the skills call
-├── skills/         SKILL.md files (symlinked into ~/.claude/skills/)
-├── google/         OAuth clients and tokens        (chmod 600)
-├── slack/          the saved browser session       (chmod 600)
-└── .env            API keys and settings           (chmod 600)
-```
+| skill | what it does |
+|---|---|
+| **`/ws-google`** | Docs → Markdown · Sheets → JSON · Drive comment threads · Calendar ranges. Also writes cells and appends to Docs. |
+| **`/ws-slack`** | Channels, DMs and thread replies → JSON. Works **with or without** a Slack API token. |
+| **`/ws-backlog`** | Issues with every comment · project overviews · issue search · wikis · activities. Read-only. |
 
-Other commands:
+Everything is written to `references/raw-source/` under the directory Claude Code is
+running in, so each project keeps its own material. That directory is created with a
+`.gitignore` of its own, so fetched workspace material never rides along in a commit.
+Nothing is uploaded anywhere; credentials stay on your machine in
+`~/.config/ws-skills`, chmod 600.
 
-```bash
-npx @masanao-ohba/ws-skills setup      # change credentials later
-npx @masanao-ohba/ws-skills doctor     # what is installed, authorized, missing
-npx @masanao-ohba/ws-skills link       # re-create the symlinks only
-npx @masanao-ohba/ws-skills uninstall  # remove the symlinks (--purge: credentials too)
-```
+## Requirements
 
-`WS_SKILLS_HOME` moves the install home; `CLAUDE_CONFIG_DIR` points at a Claude
-Code config directory other than `~/.claude`.
+| | |
+|---|---|
+| **Claude Code** | the skills install into `~/.claude/skills/` |
+| **Node ≥ 18.17** | runs the installer (nothing else — it has no dependencies) |
+| **[uv](https://docs.astral.sh/uv/)** | runs the Python side. `brew install uv` or `curl -LsSf https://astral.sh/uv/install.sh \| sh`. It brings its own Python. |
 
-## Authorization
-
-`ws-skills setup` asks for everything below and writes it to `~/.config/ws-skills/.env`.
-Settings resolve from the process environment first, then `.env` in the directory
-you run from, then that shared file — so a project can override anything locally.
-
-Throughout, `$WS` is the command the skills use:
+## Setup
 
 ```bash
-WS="uv run --project ~/.config/ws-skills/tools python ~/.config/ws-skills/tools/main.py"
+npx @masanao-ohba/ws-skills
 ```
 
-### Backlog
+That single command copies the tooling, links the skills into Claude Code, asks which
+of the three you want and collects their credentials — then walks you through the
+steps that need a person: the Google consent screen, the Slack sign-in, the one-time
+Chromium download. Skip any of them and it says so; nothing is left for you to piece
+together from a terminal afterwards.
 
-Personal Settings → API → register a key, then:
+Then **start a new Claude Code session** and the skills are there.
 
-```
-BACKLOG_DOMAIN=yourspace.backlog.jp
-BACKLOG_API_KEY=...
-BACKLOG_API_KEY_ABC123=...      # optional: a key that reaches only project ABC123
-BACKLOG_DOMAIN_ABC123=...       # optional: if that project lives in another space
-```
+Have the relevant piece below to hand before you start.
 
-A project-scoped key is selected automatically for that project's calls and is
-never used for another one — which matters when a colleague shares a key with you
-for one project. The client issues `GET` only; there is no write path in it at all.
+<details>
+<summary><b>Google</b> — an OAuth client JSON</summary>
 
-### Google
+1. Google Cloud Console → APIs & Services → **enable** the Drive, Docs, Sheets and Calendar APIs.
+2. → Credentials → Create credentials → OAuth client ID → **Desktop app** → download the JSON.
+3. Setup asks for that file's path, then offers to authorize.
 
-One OAuth client per Google organization, because a Workspace client registered as
-"Internal" rejects accounts from anywhere else.
+**Reading and writing are deliberately different credentials.** The fetch side holds a
+token whose scopes are read-only, so it cannot write even if something goes wrong — and
+no Drive write scope exists anywhere in this package. Writing to Sheets or Docs is a
+second, separate authorization that setup only runs if you ask for it.
 
-1. Google Cloud Console → APIs & Services → **Enable** the Drive, Docs, Sheets and
-   Calendar APIs.
-2. → Credentials → Create credentials → OAuth client ID → **Desktop app** → download
-   the JSON.
-3. `ws-skills setup` copies it to `~/.config/ws-skills/google/credentials.json`
-   (extra profiles become `credentials_<profile>.json`).
-4. Authorize:
+The consent URL is printed rather than opened: authorizing a work domain in whichever
+browser the tool happens to launch can invalidate the session in the browser you
+actually use.
 
-```bash
-$WS auth                  # read-only token: Calendar, Drive, Docs, Sheets
-$WS auth --write sheets   # separate token, only if you need to write cells
-$WS auth --write docs     # separate token, only if you need to append to Docs
-$WS auth --check          # what exists and whether it is still valid
-```
+Working with two Google organizations? Add a second **profile** during setup, with its
+own client JSON. A Workspace OAuth client registered as "Internal" rejects accounts
+from anywhere else, so each organization needs its own.
+</details>
 
-The consent URL is printed rather than opened: authorizing a work domain in
-whichever browser the tool happens to launch can invalidate the session in the
-browser you actually use. Open it yourself, or pass `--open`.
+<details>
+<summary><b>Slack</b> — a token, or nothing at all</summary>
 
-Read and write are deliberately different credentials. The fetch commands hold a
-token whose scopes are read-only, so they cannot write even if something goes
-wrong — and there is no Drive write scope anywhere in this package.
-
-### Slack
-
-Two backends, same output.
-
-**API backend** (`SLACK_TOKEN`) — use it if your workspace lets you install an app.
-Create one at api.slack.com/apps, add these scopes, install it, copy the token:
+**With a token** (faster, exact timestamps, no browser). Create an app at
+[api.slack.com/apps](https://api.slack.com/apps), add these scopes and install it:
 
 ```
 channels:history  groups:history  im:history  mpim:history
@@ -118,80 +87,117 @@ channels:read     groups:read     im:read     mpim:read
 users:read
 ```
 
-A bot token (`xoxb-`) must also be invited to a private channel before it can read
-it; a user token (`xoxp-`) sees what you see.
+A bot token (`xoxb-`) must also be invited to a private channel before it can read it;
+a user token (`xoxp-`) sees what you see.
 
-> **Not verified against a live workspace.** This backend's normalization is
-> covered by fixture tests, but its live calls have not been exercised. If
-> something looks wrong, please open an issue.
+> This backend's normalization is covered by fixture tests and has been exercised
+> against a live workspace with a user token. Please open an issue if anything
+> looks wrong.
 
-**Browser backend** (no token) — Playwright drives its own Chromium, separate from
-the browser you use, so your everyday session is untouched.
+**Without a token** — Playwright drives its own Chromium, separate from your
+everyday browser, so your normal session is untouched. Setup downloads Chromium
+(~150 MB) and then asks where the Slack session should come from:
 
-```bash
-uv run --project ~/.config/ws-skills/tools python -m playwright install chromium
-$WS slack-signin --url https://<workspace>.slack.com/    # sign in once, by hand
+| session | when |
+|---|---|
+| the **desktop app's** session (macOS) | the workspace signs in through Google — Google refuses to authenticate inside an automated browser, so this is the only way in. Keep the app signed in; nothing else to do |
+| a one-time sign-in in a Chromium window | password or SAML sign-in |
+| a stored email and password | unattended, where no MFA or Google sign-in is in the way |
+
+Borrowing the desktop app's session decrypts its cookie store through the macOS
+keychain. It never touches the network, and the exported session is deleted the moment
+the run ends.
+</details>
+
+<details>
+<summary><b>Backlog</b> — an API key</summary>
+
+Personal Settings → API → register a key. Setup asks for your space host
+(`yourspace.backlog.jp`) and that key. Nothing else to authorize.
+
+If a colleague shared a key that reaches only one project, add it too: it is selected
+automatically for that project's calls and **never used for another one**. The client
+issues `GET` only — there is no write path in it at all.
+</details>
+
+## Using the skills
+
+In Claude Code, just ask. The skills tell Claude the rest — which tool to reach for,
+what it can and cannot see, and where to put what comes back.
+
+> *"Snapshot Backlog issue ABC123-45."*
+> *"Save #release since April 1 and summarise what changed."*
+> *"Fetch this Google Doc and list the comments nobody resolved."*
+
+Or address one directly as a slash command, followed by instructions in your own words:
+
+```text
+/ws-slack     save #release since 2026-04-01
+/ws-google    put these figures in the Q2 tab of <sheet URL>
+/ws-backlog   what moved on ABC123-45 in the last month
 ```
 
-The session is saved to `~/.config/ws-skills/slack/state.json` and reused. Storing
-`SLACK_EMAIL` / `SLACK_PASSWORD` enables an unattended scripted login instead
-(`SLACK_AUTH_METHOD=sso` or `email_code`) — but a workspace behind Google sign-in
-cannot be scripted at all, so `slack-signin` (or `--from-app`) is the way in there.
+A few things to expect:
 
-`--from-app` borrows the desktop app's live session by decrypting its cookie store
-through the macOS keychain. It never touches the network, and the exported session
-is deleted the moment the run ends. macOS only.
-
-## Usage
-
-The skills describe all of this to Claude, so "fetch this Backlog issue" is enough.
-Directly:
-
-```bash
-# Google
-$WS gdoc https://docs.google.com/document/d/<ID>/edit
-$WS gsheet <ID_OR_URL> --list
-$WS gsheet <ID_OR_URL> --tab "Summary" --label plan
-$WS gcomments <ID_OR_URL> --label review
-$WS gcal --from 2026-04-01 --to 2026-04-30 --calendar all
-$WS gsheet-write <ID> --range 'Tab!A1' --values '[["a","b"]]'
-$WS gdoc-append <ID> --file notes.md
-
-# Slack
-$WS channels --query release
-$WS slack --channel C0123456789 --since 2026-04-01 --label release
-$WS slack --channel C0123456789 --team-id T0123456789 --backend browser --headless
-
-# Backlog
-$WS backlog ABC123-45
-$WS bl-explore overview --project ABC123
-$WS bl-explore issues --project ABC123 --keyword release --since 2026-01-01
-$WS bl-digest ABC123-45
-```
-
-Two habits worth keeping:
-
-- **Always pass `--since` when collecting a channel.** Without it, collection runs
+- **Say how far back you want a channel.** Without a date, collection runs all the way
   to the beginning of the conversation.
-- **Get approval before writing.** The Google write commands change a document
-  someone else owns; show the target, the range and the content first.
+- **Name a Slack channel however you like.** `#release`, `release` or the raw ID all
+  work; the name is looked up once per workspace and remembered afterwards.
+- **Writing to Google asks first.** The skill shows the file, the range and the exact
+  content, and waits for your go-ahead.
+
+## Managing the install
+
+| | |
+|---|---|
+| `npx @masanao-ohba/ws-skills` | install: copy the tooling, install the skills, ask for credentials, authorize |
+| `… auth` | run the authorization steps again (`--force` re-runs finished ones) |
+| `… setup` | change credentials |
+| `… doctor` | what is installed, authorized, and missing |
+| `… link` | re-install the skills only, leaving credentials alone |
+| `… uninstall` | remove the skills (`--purge` deletes the tooling and credentials too) |
+
+## Where things live
+
+```
+~/.claude/skills/
+├── ws-skills-tools/   the CLI the skills call (one copy, shared)
+├── ws-google/         SKILL.md + tools -> ../ws-skills-tools
+├── ws-slack/          SKILL.md + tools -> ../ws-skills-tools
+└── ws-backlog/        SKILL.md + tools -> ../ws-skills-tools
+
+~/.config/ws-skills/
+├── google/   OAuth clients and tokens   (chmod 600)
+├── slack/    the saved browser session  (chmod 600)
+└── .env      API keys and settings      (chmod 600)
+```
+
+A skill and the code it runs sit together, so every command in a SKILL.md is a path
+inside that skill. The config directory holds credentials and settings only — nothing
+there has to be found or read to run a skill.
+
+Settings resolve in this order: process environment → `.env` in the directory Claude
+Code is running in → that shared `.env`. So a project can override anything locally.
+`WS_SKILLS_HOME` moves the credentials directory; `CLAUDE_CONFIG_DIR` points at a
+Claude Code config other than `~/.claude`.
 
 ## Troubleshooting
 
 | symptom | cause |
 |---|---|
-| Google `404` on a file you can open | shared drive, wrong file type, or genuinely no permission — a 404 does not distinguish them. Shared drives are already handled; check the file type first. |
-| A Google Doc comes back with only its first section | tabbed document fetched without tab content. This package always asks for tabs; if you see it, the doc has one tab. |
-| Review comments missing from a Doc | they live on the Drive item, not in the body, and resolved threads vanish from the UI. Use `gcomments`. |
-| Slack channel not in `channels` output | the browser backend lists the sidebar only; muted or unjoined channels are absent. The API backend lists them. |
-| Slack collection stops early | the newest message on a freshly opened conversation is your last-read marker. Collection scrolls to the bottom first — trust the snapshot. |
-| `uv: command not found` | install uv (see Requirements). |
-| Skills do not appear in Claude Code | `ws-skills doctor`, then start a new session. |
+| Skills do not appear in Claude Code | run `doctor`, then start a new session |
+| `uv: command not found` | install uv (see [Requirements](#requirements)) |
+| Google `404` on a file you can open | shared drive, wrong file type, or genuinely no permission — a 404 does not distinguish them |
+| Doc comments missing | they live on the Drive item, not in the body, and resolved threads vanish from the UI — ask for the comments explicitly |
+| A Slack channel is missing from the list | listing without a token only sees the sidebar, so muted and unjoined channels are absent — asking for the channel by name still reaches it |
+| A Slack channel name resolves to the wrong conversation | it was renamed after being looked up — delete `~/.config/ws-skills/slack/channels.json` |
+| Slack collection seems to stop early | the newest message on a freshly opened conversation is your last-read marker, not the newest — collection scrolls to the bottom first, so trust the snapshot |
+| A Slack snapshot warns about threads | opening a thread occasionally fails even after retries; the affected messages are marked `thread_replies_failed` and re-running collects them |
 
 ## Development
 
 ```bash
-npm test    # node tests for the installer + fixture tests for the Slack API backend
+npm test    # installer tests (node:test) + Python fixture tests (unittest)
 ```
 
 ## Credits
@@ -201,4 +207,4 @@ The Slack browser backend is adapted from
 
 ## License
 
-MIT
+[MIT](LICENSE)

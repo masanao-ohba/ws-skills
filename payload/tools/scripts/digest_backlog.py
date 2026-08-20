@@ -1,17 +1,12 @@
 """Thin a Backlog issue snapshot into a per-issue Markdown digest for reading.
 
-A snapshot is mostly bookkeeping: on a long-running issue most comments carry
-nothing but a logged-hours bump. Reading the raw JSON buries the exchange in noise,
-and summarising it with a model would inject judgement. So the thinning here is
-**purely mechanical**:
+The thinning is **purely mechanical** — nothing is summarised:
 
 - drop comments with an empty body whose change log touches only bookkeeping fields
-- keep every comment that has a body, verbatim, with no summarising
-- keep status / dueDate / milestone / assignee / date changes, which are the facts
-  a schedule question turns on
-
-The digest also carries the issue description verbatim, so it holds the original
-text without needing the snapshot open beside it.
+- keep every comment that has a body, verbatim
+- keep every field change except those bookkeeping ones — the list of what matters
+  is not fixed, so anything not named as noise is reproduced
+- keep the issue description verbatim
 
     <tools> bl-digest ABC123-45 [ABC123-46 ...]
     <tools> bl-digest --project ABC123        # every snapshot of that project
@@ -25,21 +20,8 @@ from pathlib import Path
 
 import ws_paths
 
-# Bookkeeping fields: a comment that changes only these and has no body says nothing
-# about what happened between people.
+# Bookkeeping fields: a bodyless comment touching only these is dropped.
 NOISE_FIELDS = {"actualHours", "notification", "attachment"}
-KEEP_FIELDS = {
-    "status",
-    "dueDate",
-    "limitDate",
-    "startDate",
-    "milestone",
-    "assigner",
-    "resolution",
-    "issueType",
-    "parentIssueId",
-    "priority",
-}
 
 
 def _latest_snapshot(issue_key: str) -> Path:
@@ -71,10 +53,10 @@ def digest(issue_key: str) -> Path:
         for ch in changes:
             if ch.get("field") in NOISE_FIELDS:
                 continue
-            if ch.get("field") in KEEP_FIELDS or ch.get("field"):
+            if ch.get("field"):
                 old = (ch.get("originalValue") or ch.get("oldValue") or "") or "(none)"
                 new = (ch.get("newValue") or "") or "(none)"
-                line.append(f"- changed `{ch.get('field') or ch.get('name')}`: {old} -> {new}")
+                line.append(f"- changed `{ch['field']}`: {old} -> {new}")
         if body:
             line.append("")
             line.append(body)
@@ -102,8 +84,7 @@ def digest(issue_key: str) -> Path:
         header += ["", "## Description (verbatim)", "", desc]
     header += ["", "---", ""]
 
-    notes = ws_paths.notes()
-    notes.mkdir(parents=True, exist_ok=True)
+    notes = ws_paths.ensure_output_dir(ws_paths.notes())
     out = notes / f"digest-{issue_key}.md"
     out.write_text("\n".join(header) + "\n\n".join(kept) + "\n", encoding="utf-8")
     print(f"[digest] {issue_key}: {len(kept)} kept / {dropped} dropped -> {out}")

@@ -12,27 +12,25 @@ the fetch commands cannot write even by mistake. Writing uses per-service tokens
 (`token_sheets.json`, `token_docs.json`) authorized on their own. There is no
 Drive write scope at all.
 
-## Setup
+## Running the tools
 
 ```bash
-WS="uv run --project ~/.config/ws-skills/tools python ~/.config/ws-skills/tools/main.py"
+T=~/.claude/skills/ws-google/tools
+WS="uv run --project $T python $T/main.py"
 
-$WS auth --check          # status of every profile and token
-$WS auth                  # authorize the read-only token
-$WS auth --write sheets   # authorize/refresh the Sheets write token
-$WS auth --write docs
-$WS auth --whoami         # which account a token belongs to
+$WS auth --check     # status of every profile and token
+$WS auth --whoami    # which account a token belongs to
 ```
 
 If `WS_SKILLS_HOME` is set, the tools live there instead of `~/.config/ws-skills`.
 
-The consent URL is printed rather than opened, because signing in to a work domain
-in a browser the tool picks can invalidate the session of the browser you actually
-use. Open it yourself, or pass `--open`.
+**Never run `auth` to authorize.** It prints a consent URL and then blocks until a
+person approves it in a browser. If `auth --check` shows a token that is missing or
+invalid, say so and ask the user to run `npx @masanao-ohba/ws-skills auth` — then
+stop until they confirm it is done.
 
 Multiple accounts are supported through profiles (`--profile <name>`), one per
-Google organization: a Workspace OAuth client registered as "Internal" rejects
-accounts from any other organization, so each organization needs its own client.
+Google organization. `auth --check` lists the ones that exist.
 
 ## Fetch (read-only token)
 
@@ -45,7 +43,10 @@ $WS gcal --from 2026-04-01 --to 2026-04-30 --calendar all
 ```
 
 Output lands in `references/raw-source/` under the current working directory
-(`WS_OUTPUT_DIR` overrides it).
+(`WS_OUTPUT_DIR` overrides it). The directory is created with a `.gitignore` that
+excludes it from the project's repository. Fetching the same document twice never
+overwrites the earlier file — a suffix is added. The one exception is `gdoc` with an
+explicit output path, which writes exactly where it is told.
 
 ## Write (write tokens)
 

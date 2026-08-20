@@ -1,8 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { installedSkillsDir, skillsDir } from './paths.mjs';
-import { lstatOrNull, timestampSuffix } from './fsx.mjs';
+import {
+  backupsDir,
+  legacySkillsDir,
+  skillDir,
+  skillToolsLink,
+  skillsDir,
+  toolsDir,
+} from './paths.mjs';
+import { exists, lstatOrNull, syncDir, timestampSuffix } from './fsx.mjs';
 
 export const SKILLS = [
   {
@@ -16,60 +23,88 @@ export const SKILLS = [
 
 export const INTEGRATIONS = SKILLS.map((s) => s.integration);
 
-export function skillFor(integration) {
-  return SKILLS.find((s) => s.integration === integration);
-}
+/** Marks a skill directory as installed by us, not written by hand. */
+const MARKER = '.ws-skills-install';
 
 /**
  * What sits at ~/.claude/skills/<name> right now.
  *
- * `ours` — a symlink into the install home (possibly stale, hence `target`)
- * `foreign` — a symlink somewhere else, or a real directory someone else owns
+ * `ours` — a directory we installed
+ * `legacy` — a symlink into the old install home; ours to replace
+ * `foreign` — anything else: someone's own skill, or a link elsewhere
  * `absent` — nothing there
  */
-export async function linkStatus(name) {
-  const link = path.join(skillsDir(), name);
-  const want = path.join(installedSkillsDir(), name);
-  const stat = await lstatOrNull(link);
-  if (!stat) return { state: 'absent', link, want };
+export async function skillStatus(name) {
+  const dir = skillDir(name);
+  const stat = await lstatOrNull(dir);
+  if (!stat) return { state: 'absent', dir };
 
   if (stat.isSymbolicLink()) {
-    const raw = await fs.readlink(link);
-    const target = path.resolve(path.dirname(link), raw);
-    if (target === want) return { state: 'ours', link, want, target, current: true };
-    return { state: 'foreign', link, want, target };
+    const target = path.resolve(path.dirname(dir), await fs.readlink(dir));
+    const legacy = path.join(legacySkillsDir(), name);
+    if (target === legacy) return { state: 'legacy', dir, target };
+    return { state: 'foreign', dir, target };
   }
-  return { state: 'foreign', link, want, target: link, directory: true };
+
+  if (await exists(path.join(dir, MARKER))) return { state: 'ours', dir };
+  return { state: 'foreign', dir, target: dir, directory: true };
 }
 
 /**
- * Point ~/.claude/skills/<name> at the installed copy.
+ * Put the skill at ~/.claude/skills/<name>, with its `tools` link.
  *
- * Anything already there that we did not create is moved aside rather than
- * deleted — an existing skill of the same name is someone's work.
+ * Anything already there that we did not create is moved aside, never deleted.
  */
-export async function linkSkill(name, { force = false } = {}) {
-  const status = await linkStatus(name);
+export async function installSkill(name, source, { force = false } = {}) {
+  const status = await skillStatus(name);
   await fs.mkdir(skillsDir(), { recursive: true });
 
-  if (status.state === 'ours') return { ...status, action: 'unchanged' };
-
-  if (status.state === 'foreign') {
+  let action = 'installed';
+  if (status.state === 'ours') {
+    action = 'updated';
+  } else if (status.state === 'legacy') {
+    await fs.rm(status.dir);
+    action = 'migrated';
+  } else if (status.state === 'foreign') {
     if (!force) return { ...status, action: 'conflict' };
-    const backup = `${status.link}.backup-${timestampSuffix()}`;
-    await fs.rename(status.link, backup);
-    await fs.symlink(status.want, status.link);
-    return { ...status, action: 'replaced', backup };
+    // Move aside outside ~/.claude/skills, or Claude Code would keep
+    // discovering the old SKILL.md as a duplicate skill.
+    await fs.mkdir(backupsDir(), { recursive: true });
+    const backup = path.join(backupsDir(), `${name}.backup-${timestampSuffix()}`);
+    await fs.rename(status.dir, backup);
+    status.backup = backup;
+    action = 'replaced';
   }
 
-  await fs.symlink(status.want, status.link);
-  return { ...status, action: 'linked' };
+  // `tools` is ours to manage, so it survives the sync that refreshes SKILL.md.
+  await syncDir(source, status.dir, { keep: ['tools'] });
+  await fs.writeFile(path.join(status.dir, MARKER), `${name}\n`);
+  await linkTools(name);
+  return { ...status, action };
 }
 
-/** Remove the symlink, but only if it is one of ours. */
-export async function unlinkSkill(name) {
-  const status = await linkStatus(name);
-  if (status.state !== 'ours') return { ...status, action: 'skipped' };
-  await fs.rm(status.link);
-  return { ...status, action: 'removed' };
+/** `<skill>/tools` -> the shared tooling, replaced if it points anywhere else. */
+async function linkTools(name) {
+  const link = skillToolsLink(name);
+  const target = path.relative(skillDir(name), toolsDir());
+  const stat = await lstatOrNull(link);
+  if (stat) {
+    if (stat.isSymbolicLink() && (await fs.readlink(link)) === target) return;
+    await fs.rm(link, { recursive: true, force: true });
+  }
+  await fs.symlink(target, link);
+}
+
+/** Remove the skill, but only if it is one of ours. */
+export async function removeSkill(name) {
+  const status = await skillStatus(name);
+  if (status.state === 'ours') {
+    await fs.rm(status.dir, { recursive: true, force: true });
+    return { ...status, action: 'removed' };
+  }
+  if (status.state === 'legacy') {
+    await fs.rm(status.dir);
+    return { ...status, action: 'removed' };
+  }
+  return { ...status, action: 'skipped' };
 }

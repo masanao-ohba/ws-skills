@@ -1,4 +1,6 @@
 # Build artifacts of the Python side — regenerated on the user's machine.
+# The `prepack` script clears them too: a root .npmignore does not reliably reach
+# inside a directory listed in package.json `files`.
 __pycache__/
 *.pyc
 .venv/

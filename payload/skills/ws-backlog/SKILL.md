@@ -21,7 +21,8 @@ Resolved from the process environment, then `.env` in the current directory, the
 ## Usage
 
 ```bash
-WS="uv run --project ~/.config/ws-skills/tools python ~/.config/ws-skills/tools/main.py"
+T=~/.claude/skills/ws-backlog/tools
+WS="uv run --project $T python $T/main.py"
 
 # snapshot one issue with every comment
 $WS backlog ABC123-45
@@ -40,7 +41,8 @@ $WS bl-digest --project ABC123
 
 Output lands in `references/raw-source/` under the current working directory
 (digests go to `references/working-notes/`; `WS_OUTPUT_DIR` / `WS_NOTES_DIR`
-override both).
+override both). Both directories are created with a `.gitignore` that excludes
+them from the project's repository.
 
 - `issues` / `wikis` / `activities` only print a listing — add `--save` to write it.
 - `issues` searches every status, not just open ones, and sorts by last update.

@@ -9,30 +9,47 @@ export const yellow = wrap(33);
 export const red = wrap(31);
 export const cyan = wrap(36);
 
-export function heading(text) {
-  console.log(`\n${bold(text)}`);
+/** Whether a flow's left gutter is open — everything printed hangs off it. */
+let flowOpen = false;
+const lead = () => (flowOpen ? `${dim('│')}  ` : '  ');
+
+export function flowStart(title) {
+  console.log(`\n${cyan('┌')}  ${bold(title)}`);
+  flowOpen = true;
+}
+
+export function flowEnd(text = '') {
+  flowOpen = false;
+  console.log(`${cyan('└')}  ${text}`);
+}
+
+/** A named step or section inside the flow (a plain heading outside one). */
+export function heading(title, note = '') {
+  const tail = note ? dim(` — ${note}`) : '';
+  if (flowOpen) console.log(`${dim('│')}\n${dim('│')}  ${bold(`▸ ${title}`)}${tail}`);
+  else console.log(`\n${bold(title)}${tail}`);
 }
 
 export function info(text) {
-  console.log(`  ${text}`);
+  console.log(`${lead()}${text}`);
+}
+
+export function bar(text = '') {
+  console.log(text ? `${lead()}${text}` : dim('│'));
 }
 
 export function ok(text) {
-  console.log(`  ${green('✓')} ${text}`);
+  console.log(`${lead()}${green('✓')} ${text}`);
 }
 
 export function warn(text) {
-  console.log(`  ${yellow('!')} ${text}`);
+  console.log(`${lead()}${yellow('!')} ${text}`);
 }
 
 export function bad(text) {
-  console.log(`  ${red('✗')} ${text}`);
+  console.log(`${lead()}${red('✗')} ${text}`);
 }
 
 export function fail(text) {
   console.error(`${red('error')} ${text}`);
-}
-
-export function step(text) {
-  console.log(`${cyan('›')} ${text}`);
 }

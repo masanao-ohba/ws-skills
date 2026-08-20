@@ -56,11 +56,14 @@ const SECTIONS = [
     comment: [
       'WS_SLACK_BACKEND: api (needs SLACK_TOKEN) or browser (Playwright).',
       'Unset, it is api when SLACK_TOKEN exists, otherwise browser.',
-      'SLACK_EMAIL / SLACK_PASSWORD are only for the browser backend\'s scripted',
-      'login; leave them out and sign in once with `slack-signin` instead.',
+      'SLACK_FROM_APP=1 borrows the Slack desktop app session (macOS) — the only',
+      'way into a workspace that signs in through Google, which refuses to',
+      'authenticate inside an automated browser.',
+      'SLACK_EMAIL / SLACK_PASSWORD are only for the scripted login instead.',
     ],
     keys: [
       'WS_SLACK_BACKEND',
+      'SLACK_FROM_APP',
       'SLACK_TOKEN',
       'SLACK_TEAM_ID',
       'SLACK_WORKSPACE',
@@ -83,20 +86,17 @@ function isKnown(key) {
  * Render the shared .env.
  *
  * Keys the file already had that this tool does not manage are carried through
- * untouched — hand-added settings are not silently dropped by a re-run.
+ * untouched.
  */
-export function renderEnv(values, { header = true } = {}) {
-  const lines = [];
-  if (header) {
-    lines.push(
-      '# Settings for the ws-* Claude Code skills.',
-      '# Written by `ws-skills setup`. Safe to edit by hand — a later setup run',
-      '# keeps whatever it finds here as the default.',
-      '#',
-      '# Resolution order: process environment > ./.env > this file.',
-      '',
-    );
-  }
+export function renderEnv(values) {
+  const lines = [
+    '# Settings for the ws-* Claude Code skills.',
+    '# Written by `ws-skills setup`. Safe to edit by hand — a later setup run',
+    '# keeps whatever it finds here as the default.',
+    '#',
+    '# Resolution order: process environment > ./.env > this file.',
+    '',
+  ];
 
   for (const section of SECTIONS) {
     const keys = [

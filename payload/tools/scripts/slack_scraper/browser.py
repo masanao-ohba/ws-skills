@@ -52,7 +52,15 @@ def navigate_to_thread(page: Page, team_id: str, channel_id: str, slack_ts: str)
         f"/thread/{channel_id}-{slack_ts}"
     )
     page.goto(thread_url, wait_until="domcontentloaded", timeout=30_000)
-    page.wait_for_function('() => window.location.href.includes("thread")', timeout=10_000)
+
+    # Both waits mean the same thing to the caller — the panel did not open — so
+    # both answer with False. Letting one of them raise instead made a routine
+    # timeout look like a crash and skipped the retry the other one gets.
+    try:
+        page.wait_for_function('() => window.location.href.includes("thread")', timeout=10_000)
+    except PwTimeout:
+        return False
+
     human_delay(2.0, 3.0)
 
     try:

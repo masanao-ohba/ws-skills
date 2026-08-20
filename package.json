@@ -10,6 +10,7 @@
     "bin",
     "src",
     "payload",
+    "!payload/tools/tests",
     "README.md",
     "LICENSE"
   ],
@@ -17,7 +18,8 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs && python3 payload/tools/tests/test_slack_api.py"
+    "prepack": "find payload -name __pycache__ -type d -prune -exec rm -rf {} + || true",
+    "test": "node --test test/*.test.mjs && python3 payload/tools/tests/test_slack_api.py && python3 payload/tools/tests/test_ws_paths.py && python3 payload/tools/tests/test_slack_channels.py"
   },
   "keywords": [
     "claude",

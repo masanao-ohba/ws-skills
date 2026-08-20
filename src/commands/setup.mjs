@@ -6,7 +6,7 @@ import { readEnvFile, renderEnv } from '../lib/envfile.mjs';
 import { ask, askSecret, confirm, interactive, selectMany, selectOne } from '../lib/prompt.mjs';
 import { configHome, envFile, googleDir, slackDir, tildify } from '../lib/paths.mjs';
 import { INTEGRATIONS, SKILLS } from '../lib/skills.mjs';
-import { bold, dim, heading, info, ok, warn } from '../lib/ui.mjs';
+import { bar, bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../lib/ui.mjs';
 
 const expand = (p) => (p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p);
 
@@ -25,50 +25,78 @@ export function configuredIntegrations(values) {
 }
 
 async function setupBacklog(values) {
-  heading('Backlog');
-  info('A read-only client: issues, comments, wikis and activities, nothing written.');
+  heading('Backlog', 'read-only: issues, comments, wikis, activities');
 
   values.BACKLOG_DOMAIN = await ask('Backlog space host', {
     def: values.BACKLOG_DOMAIN || '',
     hint: 'the host part of your Backlog URL, e.g. yourspace.backlog.jp or yourspace.backlog.com',
   });
 
-  const key = await askSecret('API key (Personal Settings -> API -> Register new key)', {
+  const key = await askSecret('Backlog API key', {
     keep: Boolean(values.BACKLOG_API_KEY),
+    hint: 'Personal Settings → API → Register new key',
   });
   if (key) values.BACKLOG_API_KEY = key;
   else if (!values.BACKLOG_API_KEY) warn('no API key set — ws-backlog will not run until there is one');
 
-  if (
-    await confirm(
-      'Add a key that is scoped to a single project? (a key someone shared with you)',
-      false,
-    )
-  ) {
-    while (true) {
-      const project = (await ask('Project key (blank to stop)', { def: '' })).toUpperCase();
-      if (!project) break;
-      const scoped = await askSecret(`API key for ${project}`);
-      if (scoped) values[`BACKLOG_API_KEY_${project}`] = scoped;
-      const other = await ask(`Space host for ${project} (blank if the same space)`, { def: '' });
-      if (other) values[`BACKLOG_DOMAIN_${project}`] = other;
-    }
+  // An explicit question each round, rather than a bare "blank to stop" prompt.
+  let another = await confirm('Add a key that is scoped to a single project?', false, {
+    hint: 'a key someone shared with you, that reaches that project only',
+  });
+  while (another) {
+    const project = (await ask('Project key', { def: '', hint: 'e.g. ABC123' })).toUpperCase();
+    if (!project) break;
+
+    const scoped = await askSecret(`API key for ${project}`);
+    if (scoped) values[`BACKLOG_API_KEY_${project}`] = scoped;
+
+    const other = await ask(`Space host for ${project}`, {
+      def: '',
+      hint: 'press Enter unless that project lives in a different Backlog space',
+    });
+    if (other) values[`BACKLOG_DOMAIN_${project}`] = other;
+    ok(`${project}: scoped key stored`);
+
+    another = await confirm('Add another project-scoped key?', false);
   }
 }
 
 async function setupGoogle(values) {
-  heading('Google Workspace');
-  info('Read and write use separate tokens, so fetching can never write.');
-  info(
-    `OAuth client JSON files live in ${tildify(googleDir())} ` +
-      '(create one: Google Cloud Console -> APIs & Services -> Credentials -> OAuth client ID -> Desktop app).',
-  );
+  heading('Google Workspace', 'read and write hold separate tokens');
+  bar(dim(`OAuth client JSON files live in ${tildify(googleDir())}`));
+  bar(dim('create one: Cloud Console → Credentials → OAuth client ID → Desktop app'));
 
-  const extra = await ask(
-    'Extra profile names, comma separated (one per Google organization; blank for just "default")',
-    { def: (values.GOOGLE_PROFILES || 'default').split(',').filter((p) => p !== 'default').join(',') },
-  );
-  const profiles = ['default', ...extra.split(',').map((p) => p.trim()).filter(Boolean)];
+  // Profiles exist for a second Google organization, which most setups never need.
+  const configured = (values.GOOGLE_PROFILES || 'default')
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p && p !== 'default');
+
+  let extras = configured;
+  if (extras.length) {
+    bar(`extra profiles: ${extras.join(', ')}`);
+    if (await confirm('Remove them?', false, { hint: 'their tokens stay on disk, unused' })) {
+      extras = [];
+    }
+  }
+
+  const askForMore = extras.length
+    ? 'Add one more organization?'
+    : 'Do you work with a second Google organization?';
+  if (
+    await confirm(askForMore, false, {
+      hint: 'an OAuth client registered "Internal" rejects accounts from any other organization',
+    })
+  ) {
+    while (true) {
+      const name = await askProfileName(extras);
+      if (!name) break;
+      extras.push(name);
+      if (!(await confirm('Add another?', false))) break;
+    }
+  }
+
+  const profiles = ['default', ...extras];
   values.GOOGLE_PROFILES = profiles.join(',');
 
   await ensureDir(googleDir(), 0o700);
@@ -86,7 +114,7 @@ async function setupGoogle(values) {
       hint: 'blank to skip — you can drop the file in later',
     });
     if (!source) {
-      warn(`${profile}: no OAuth client yet. Save it to ${tildify(target)} before authorizing.`);
+      warn(`${profile}: no OAuth client yet — save it to ${tildify(target)} before authorizing`);
       continue;
     }
     const resolved = expand(source);
@@ -99,8 +127,28 @@ async function setupGoogle(values) {
   }
 }
 
+/** A profile name becomes part of a filename, so keep it to a short plain label. */
+async function askProfileName(taken) {
+  while (true) {
+    const name = await ask('Name for that organization', {
+      def: '',
+      hint: 'a short label used in the token filenames, e.g. work, legacy — blank to stop',
+    });
+    if (!name) return '';
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,19}$/.test(name)) {
+      warn('letters, digits, - and _ only (up to 20 characters)');
+      continue;
+    }
+    if (name === 'default' || taken.includes(name)) {
+      warn(`${name} is already in use`);
+      continue;
+    }
+    return name;
+  }
+}
+
 async function setupSlack(values) {
-  heading('Slack');
+  heading('Slack', 'channels, DMs and thread replies');
   const backend = await selectOne(
     'Which backend should Slack collection use?',
     [
@@ -120,9 +168,8 @@ async function setupSlack(values) {
   values.WS_SLACK_BACKEND = backend;
 
   if (backend === 'api') {
-    info('Scopes to grant: channels:history, groups:history, im:history, mpim:history,');
-    info('channels:read, groups:read, im:read, mpim:read, users:read.');
-    info(dim('This backend has not been verified against a live workspace — see the README.'));
+    bar('scopes to grant: channels:history, groups:history, im:history, mpim:history,');
+    bar('channels:read, groups:read, im:read, mpim:read, users:read');
     const token = await askSecret('Slack token (xoxp-... or xoxb-...)', {
       keep: Boolean(values.SLACK_TOKEN),
     });
@@ -142,11 +189,42 @@ async function setupSlack(values) {
       def: values.SLACK_WORKSPACE || '',
       hint: 'the xxx of https://xxx.slack.com',
     });
-    const scripted = await confirm(
-      'Store an email/password for the scripted login? (no = sign in once by hand instead)',
-      Boolean(values.SLACK_EMAIL),
+
+    // Google refuses sign-in inside an automation-controlled browser, so borrowing
+    // the desktop app's session is the only way into such a workspace.
+    const sources = [];
+    if (process.platform === 'darwin') {
+      sources.push({
+        value: 'app',
+        label: "Borrow the Slack desktop app's session",
+        hint: 'macOS; the only way in when the workspace signs in through Google',
+      });
+    }
+    sources.push({
+      value: 'signin',
+      label: 'Sign in once in a Chromium window',
+      hint: 'fine for password or SAML sign-in; Google sign-in is blocked there',
+    });
+    sources.push({
+      value: 'password',
+      label: 'Store an email and password',
+      hint: 'unattended, but no use behind Google sign-in or MFA',
+    });
+
+    const current = values.SLACK_FROM_APP === '1' ? 'app' : values.SLACK_EMAIL ? 'password' : 'signin';
+    const source = await selectOne(
+      'How should collection get its Slack session?',
+      sources,
+      Math.max(0, sources.findIndex((o) => o.value === current)),
     );
-    if (scripted) {
+
+    delete values.SLACK_FROM_APP;
+    if (source === 'app') {
+      values.SLACK_FROM_APP = '1';
+      delete values.SLACK_EMAIL;
+      delete values.SLACK_PASSWORD;
+      bar(dim('keep the desktop app signed in; its cookies are read at collection time'));
+    } else if (source === 'password') {
       values.SLACK_EMAIL = await ask('Slack account email', { def: values.SLACK_EMAIL || '' });
       const password = await askSecret('Slack password', { keep: Boolean(values.SLACK_PASSWORD) });
       if (password) values.SLACK_PASSWORD = password;
@@ -161,9 +239,9 @@ async function setupSlack(values) {
     } else {
       delete values.SLACK_EMAIL;
       delete values.SLACK_PASSWORD;
-      info('Sign in once with:');
-      info(dim('  ws-skills doctor   # prints the exact command for your install'));
+      bar(dim('a one-time sign-in step follows right after this'));
     }
+
     await ensureDir(slackDir(), 0o700);
   }
 }
@@ -207,9 +285,21 @@ export async function runWizard({ only = null } = {}) {
 }
 
 export async function setupCommand() {
-  console.log(bold('\nws-skills setup'));
-  const { integrations } = await runWizard();
+  flowStart('ws-skills setup');
+  const { values, integrations } = await runWizard();
   info(`configured: ${integrations.join(', ') || 'nothing'}`);
-  info(`run ${dim('ws-skills doctor')} to check what is still missing`);
+
+  // Changing a credential often changes what still needs authorizing. Imported
+  // lazily because auth.mjs reads configuredIntegrations from this module.
+  const { authorize } = await import('./auth.mjs');
+  const pending = interactive() ? await authorize(values) : [];
+
+  if (pending.length) {
+    heading('Still to do');
+    for (const item of pending) info(`- ${item}`);
+    flowEnd(`run ${bold('npx @masanao-ohba/ws-skills auth')} to pick these up`);
+    return 1;
+  }
+  flowEnd(`done — check anything missing with ${bold('npx @masanao-ohba/ws-skills doctor')}`);
   return 0;
 }

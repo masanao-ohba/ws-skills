@@ -1,38 +1,43 @@
 import path from 'node:path';
 
-import { exists } from '../lib/fsx.mjs';
 import { readEnvFile } from '../lib/envfile.mjs';
-import { envFile, installedSkillsDir, tildify } from '../lib/paths.mjs';
-import { SKILLS, linkSkill } from '../lib/skills.mjs';
+import { envFile, packageRoot, tildify } from '../lib/paths.mjs';
+import { SKILLS, installSkill } from '../lib/skills.mjs';
 import { configuredIntegrations } from './setup.mjs';
-import { bad, bold, dim, info, ok, warn } from '../lib/ui.mjs';
+import { dim, flowEnd, flowStart, info, ok, warn } from '../lib/ui.mjs';
 
-/** Re-create the symlinks — after a Claude config move, or a stray `rm`. */
+/**
+ * Put the skills back where Claude Code looks — after a config move, a stray
+ * `rm`, or a `tools` link left dangling by an upgrade.
+ *
+ * Credentials are not touched, so this is the cheap repair when only the
+ * ~/.claude side is wrong.
+ */
 export async function linkCommand({ force = false } = {}) {
-  console.log(bold('\nws-skills link'));
+  flowStart('ws-skills link');
 
   const values = await readEnvFile(envFile());
   const chosen = configuredIntegrations(values);
   const wanted = chosen.length ? SKILLS.filter((s) => chosen.includes(s.integration)) : SKILLS;
+  const source = path.join(packageRoot(), 'payload', 'skills');
 
   let problems = 0;
   for (const skill of wanted) {
-    if (!(await exists(path.join(installedSkillsDir(), skill.name, 'SKILL.md')))) {
-      bad(`${skill.name} is not installed — run \`ws-skills install\` first`);
-      problems += 1;
-      continue;
-    }
-    const result = await linkSkill(skill.name, { force });
+    const result = await installSkill(skill.name, path.join(source, skill.name), { force });
     if (result.action === 'conflict') {
-      warn(`/${skill.name}: ${tildify(result.link)} already exists — re-run with --force`);
+      warn(`/${skill.name}: ${tildify(result.dir)} already exists — re-run with --force`);
       problems += 1;
     } else if (result.action === 'replaced') {
-      ok(`/${skill.name} linked ${dim(`(previous copy kept at ${path.basename(result.backup)})`)}`);
-    } else if (result.action === 'linked') {
-      ok(`/${skill.name} linked`);
+      ok(
+        `/${skill.name} installed ${dim(`(previous copy kept at ${tildify(result.backup)})`)}`,
+      );
+    } else if (result.action === 'updated') {
+      info(dim(`/${skill.name} already in place`));
     } else {
-      info(dim(`/${skill.name} already linked`));
+      ok(`/${skill.name} installed`);
     }
   }
+
+  flowEnd(problems ? `${problems} skill(s) still need --force` : 'all skills linked');
   return problems ? 1 : 0;
 }

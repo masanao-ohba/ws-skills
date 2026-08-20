@@ -1,42 +1,43 @@
 import fs from 'node:fs/promises';
 
 import { confirm, interactive } from '../lib/prompt.mjs';
-import { configHome, tildify } from '../lib/paths.mjs';
-import { SKILLS, unlinkSkill } from '../lib/skills.mjs';
-import { bold, dim, heading, info, ok, warn } from '../lib/ui.mjs';
+import { configHome, tildify, toolsDir } from '../lib/paths.mjs';
+import { SKILLS, removeSkill } from '../lib/skills.mjs';
+import { bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../lib/ui.mjs';
 
 export async function uninstallCommand({ purge = false, force = false } = {}) {
-  console.log(bold('\nws-skills uninstall'));
+  flowStart('ws-skills uninstall');
 
-  heading('Unlinking the skills');
+  heading('Removing the skills');
   for (const skill of SKILLS) {
-    const result = await unlinkSkill(skill.name);
-    if (result.action === 'removed') ok(`/${skill.name} unlinked`);
-    else if (result.state === 'absent') info(dim(`/${skill.name} was not linked`));
-    else warn(`/${skill.name} left alone — ${tildify(result.link)} is not one of ours`);
+    const result = await removeSkill(skill.name);
+    if (result.action === 'removed') ok(`/${skill.name} removed`);
+    else if (result.state === 'absent') info(dim(`/${skill.name} was not installed`));
+    else warn(`/${skill.name} left alone — ${tildify(result.dir)} is not one of ours`);
   }
 
   if (!purge) {
-    info('');
-    info(`Tools and credentials are still at ${tildify(configHome())}.`);
-    info(`Remove them too with ${dim('ws-skills uninstall --purge')}.`);
+    info(`The tooling is still at ${tildify(toolsDir())}, credentials at ${tildify(configHome())}.`);
+    flowEnd(`remove them too with ${bold('npx @masanao-ohba/ws-skills uninstall --purge')}`);
     return 0;
   }
 
-  heading('Removing the install home');
-  info(`This deletes ${tildify(configHome())}, including OAuth tokens, the saved`);
-  info('Slack session, and the API keys in .env.');
+  heading('Removing the tooling and the credentials');
+  info(`This deletes ${tildify(toolsDir())} and ${tildify(configHome())}, including`);
+  info('OAuth tokens, the saved Slack session, and the API keys in .env.');
   if (!force && interactive()) {
-    if (!(await confirm('Delete it?', false))) {
-      info('kept');
+    if (!(await confirm('Delete them?', false))) {
+      flowEnd('kept');
       return 0;
     }
   } else if (!force) {
-    warn('not a terminal and --force was not passed — keeping the install home');
+    warn('not a terminal and --force was not passed — keeping both');
+    flowEnd('');
     return 1;
   }
 
+  await fs.rm(toolsDir(), { recursive: true, force: true });
   await fs.rm(configHome(), { recursive: true, force: true });
-  ok(`removed ${tildify(configHome())}`);
+  flowEnd(`removed ${tildify(toolsDir())} and ${tildify(configHome())}`);
   return 0;
 }
