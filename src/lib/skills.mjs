@@ -5,10 +5,10 @@ import {
   AGENT_LINKS,
   agentSkillLink,
   backupsDir,
-  legacySkillsDir,
   skillDir,
   skillToolsLink,
   skillsDir,
+  tildify,
   toolsDir,
 } from './paths.mjs';
 import { exists, lstatOrNull, syncDir, timestampSuffix } from './fsx.mjs';
@@ -32,9 +32,10 @@ const MARKER = '.ws-skills-install';
  * What sits at ~/.agents/skills/<name> right now.
  *
  * `ours` — a directory we installed
- * `legacy` — a symlink into the old install home; ours to replace
  * `foreign` — anything else: someone's own skill, or a link elsewhere
  * `absent` — nothing there
+ *
+ * This is the one real copy, so a symlink here is never ours to follow.
  */
 export async function skillStatus(name) {
   const dir = skillDir(name);
@@ -43,8 +44,6 @@ export async function skillStatus(name) {
 
   if (stat.isSymbolicLink()) {
     const target = path.resolve(path.dirname(dir), await fs.readlink(dir));
-    const legacy = path.join(legacySkillsDir(), name);
-    if (target === legacy) return { state: 'legacy', dir, target };
     return { state: 'foreign', dir, target };
   }
 
@@ -57,8 +56,7 @@ export async function skillStatus(name) {
  * real skill.
  *
  * `ours` — already the link we would create
- * `stale` — a link of ours pointing somewhere else, or a directory an earlier
- *   version installed here when this was the real location; ours to replace
+ * `stale` — a link of ours aimed somewhere else; ours to point back
  * `foreign` — someone else's skill
  * `absent` — nothing there
  */
@@ -70,13 +68,14 @@ async function linkStatus(agent, name) {
   if (stat.isSymbolicLink()) {
     const target = path.resolve(path.dirname(link), await fs.readlink(link));
     if (target === skillDir(name)) return { state: 'ours', link, target };
-    // An earlier layout linked into the config home; so did we, one move ago.
-    if (target === path.join(legacySkillsDir(), name)) return { state: 'stale', link, target };
+    // A skills home we no longer use, or a target that is gone: still a link we
+    // made, so it is ours to point back, not a skill to move aside.
+    if (!(await exists(target)) || (await exists(path.join(target, MARKER)))) {
+      return { state: 'stale', link, target };
+    }
     return { state: 'foreign', link, target };
   }
 
-  // Before the skills moved to ~/.agents/skills, this was the real directory.
-  if (await exists(path.join(link, MARKER))) return { state: 'stale', link, directory: true };
   return { state: 'foreign', link, target: link, directory: true };
 }
 
@@ -85,6 +84,11 @@ async function linkStatus(agent, name) {
  * every agent that needs its own entry at it.
  *
  * Anything already there that we did not create is moved aside, never deleted.
+ *
+ * `action` says what happened to the skill itself, and nothing else — an agent
+ * whose own entry is taken does not stop the skill from being installed. Those
+ * are reported separately in `blocked`, each naming the entry in the way, so a
+ * caller can say which path it means rather than pointing at the skill.
  */
 export async function installSkill(name, source, { force = false } = {}) {
   const status = await skillStatus(name);
@@ -93,11 +97,8 @@ export async function installSkill(name, source, { force = false } = {}) {
   let action = 'installed';
   if (status.state === 'ours') {
     action = 'updated';
-  } else if (status.state === 'legacy') {
-    await fs.rm(status.dir);
-    action = 'migrated';
   } else if (status.state === 'foreign') {
-    if (!force) return { ...status, action: 'conflict' };
+    if (!force) return { ...status, action: 'conflict', links: [], blocked: [] };
     await moveAside(name, status.dir, status);
     action = 'replaced';
   }
@@ -109,15 +110,51 @@ export async function installSkill(name, source, { force = false } = {}) {
 
   const links = [];
   for (const agent of AGENT_LINKS) links.push(await linkSkillFor(agent, name, { force }));
-  const conflicts = links.filter((l) => l.action === 'conflict');
-  if (conflicts.length) return { ...status, action: 'conflict', links, conflicts };
-  return { ...status, action, links };
+  return { ...status, action, links, blocked: links.filter((l) => l.action === 'conflict') };
 }
+
+/**
+ * What to tell the user about one `installSkill` result, as lines to print.
+ *
+ * `install` and `link` both call `installSkill` and have to say the same things
+ * about the same outcome, so the wording lives here rather than in each command
+ * — a new outcome cannot end up described one way in one and another way in the
+ * other. What to do about it is still the command's own: whether a line is worth
+ * a non-zero exit is `isBlocked`.
+ */
+export function describeInstall(name, result) {
+  if (result.action === 'conflict') {
+    return [{ level: 'bad', text: `/${name}: left alone (${tildify(result.dir)} already exists)` }];
+  }
+
+  const lines = [];
+  if (result.action === 'replaced') {
+    lines.push({
+      level: 'ok',
+      text: `/${name} installed`,
+      note: `previous copy kept at ${tildify(result.backup)}`,
+    });
+  } else if (result.action === 'updated') {
+    lines.push({ level: 'ok', text: `/${name} up to date` });
+  } else {
+    lines.push({ level: 'ok', text: `/${name} installed` });
+  }
+
+  // In place, but an agent whose own entry is taken still cannot reach it.
+  for (const link of result.blocked) {
+    lines.push({
+      level: 'bad',
+      text: `/${name}: ${link.agent.label} cannot see it — ${tildify(link.link)} is not ours`,
+    });
+  }
+  return lines;
+}
+
+/** Whether anything stood in the way — the skill's own location, or an agent's entry. */
+export const isBlocked = (result) => result.action === 'conflict' || result.blocked.length > 0;
 
 /** Move a directory that is not ours out of the skills tree, never deleting it. */
 async function moveAside(name, dir, carry) {
-  // Backups live outside any skills directory, or the agent would keep
-  // discovering the old SKILL.md as a duplicate skill.
   await fs.mkdir(backupsDir(), { recursive: true });
   const backup = path.join(backupsDir(), `${name}.backup-${timestampSuffix()}`);
   await fs.rename(dir, backup);
@@ -155,26 +192,31 @@ async function linkTools(name) {
   await fs.symlink(target, link);
 }
 
-/** Remove the skill and every link to it, but only where it is one of ours. */
+/**
+ * Remove the skill and every link to it, but only where it is one of ours.
+ *
+ * `action` is what happened to the skill itself, and nothing else — removing a
+ * link is not removing the skill. An entry that is not ours is left where it is
+ * and named in `left`, because the agent goes on reading whatever sits there.
+ */
 export async function removeSkill(name) {
   // The links go first: once the real directory is gone they only look broken.
   const unlinked = [];
+  const left = [];
   for (const agent of AGENT_LINKS) {
     const status = await linkStatus(agent, name);
     if (status.state === 'ours' || status.state === 'stale') {
       await fs.rm(status.link, { recursive: true, force: true });
       unlinked.push(agent.id);
+    } else if (status.state === 'foreign') {
+      left.push({ ...status, agent });
     }
   }
 
   const status = await skillStatus(name);
   if (status.state === 'ours') {
     await fs.rm(status.dir, { recursive: true, force: true });
-    return { ...status, unlinked, action: 'removed' };
+    return { ...status, unlinked, left, action: 'removed' };
   }
-  if (status.state === 'legacy') {
-    await fs.rm(status.dir);
-    return { ...status, unlinked, action: 'removed' };
-  }
-  return { ...status, unlinked, action: unlinked.length ? 'removed' : 'skipped' };
+  return { ...status, unlinked, left, action: 'skipped' };
 }

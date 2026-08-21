@@ -77,11 +77,13 @@ async function checkInstall() {
     }
 
     // Agents reading ~/.agents/skills need nothing; the rest need their link.
+    // Where it lands is the question — someone else's skill of the same name
+    // also has a SKILL.md, and reaches nothing of ours.
+    const real = await fs.realpath(skillDir(skill.name)).catch(() => null);
     const missing = [];
     for (const agent of AGENT_LINKS) {
-      if (!(await exists(path.join(agentSkillLink(agent, skill.name), 'SKILL.md')))) {
-        missing.push(agent.label);
-      }
+      const reached = await fs.realpath(agentSkillLink(agent, skill.name)).catch(() => null);
+      if (reached !== real) missing.push(agent.label);
     }
     if (missing.length) {
       bad(`/${skill.name}: not reachable from ${missing.join(', ')} — run ${bold(RUN_LINK)}`);

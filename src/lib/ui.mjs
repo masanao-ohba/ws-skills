@@ -53,3 +53,10 @@ export function bad(text) {
 export function fail(text) {
   console.error(`${red('error')} ${text}`);
 }
+
+const LEVELS = { ok, warn, bad, info };
+
+/** Print one line of a description — see `describeInstall` in skills.mjs. */
+export function emit({ level, text, note }) {
+  LEVELS[level](note ? `${text} ${dim(`(${note})`)}` : text);
+}

@@ -89,7 +89,6 @@ test('every skill is reachable from the agents dir and linked into Claude Code',
   assert.equal(code, 0, stdout);
 
   for (const name of SKILL_NAMES) {
-    // One real copy, so nothing has to be kept in step between agents.
     const real = path.join(box.skills, name);
     assert.ok((await fs.lstat(real)).isDirectory(), `${name} should be real in the agents dir`);
 
@@ -136,6 +135,41 @@ test('install never overwrites an unrelated skill of the same name', async (t) =
   const backupsHome = path.join(box.home, 'backups');
   const backups = (await fs.readdir(backupsHome)).filter((e) => e.startsWith('ws-google.backup-'));
   assert.equal(backups.length, 1, 'the previous entry should be kept as a backup');
+  assert.equal(
+    await fs.readFile(path.join(backupsHome, backups[0], 'SKILL.md'), 'utf8'),
+    'someone else\n',
+  );
+});
+
+test("install reports the agent entry in the way, not the skill's own location", async (t) => {
+  const box = await sandbox(t);
+
+  // Someone else's ws-google, in Claude Code's directory rather than ours. The
+  // skill itself has nothing in its way — only the entry Claude Code reads.
+  const theirs = path.join(box.claudeSkills, 'ws-google');
+  await fs.mkdir(theirs, { recursive: true });
+  await fs.writeFile(path.join(theirs, 'SKILL.md'), 'someone else\n');
+
+  const first = await cliRun(box.env, ['install', '--no-setup']);
+  assert.equal(first.code, 1, 'a link we cannot make is still a problem to report');
+  assert.equal(await fs.readFile(path.join(theirs, 'SKILL.md'), 'utf8'), 'someone else\n');
+
+  assert.ok(first.stdout.includes(theirs), `the run should name ${theirs}\n${first.stdout}`);
+  assert.doesNotMatch(first.stdout, /ws-google: left alone/);
+  assert.ok(await fs.stat(path.join(box.skills, 'ws-google', 'SKILL.md')));
+
+  // The skills whose entry was free are linked as usual, not held back.
+  assert.ok((await fs.lstat(path.join(box.claudeSkills, 'ws-slack'))).isSymbolicLink());
+
+  const forced = await cliRun(box.env, ['install', '--no-setup', '--force']);
+  assert.equal(forced.code, 0, forced.stdout);
+  assert.ok((await fs.lstat(theirs)).isSymbolicLink(), 'the entry should now be our link');
+
+  const backupsHome = path.join(box.home, 'backups');
+  const backups = (await fs.readdir(backupsHome)).filter((e) =>
+    e.startsWith('claude-ws-google.backup-'),
+  );
+  assert.equal(backups.length, 1, 'their skill should be kept, not deleted');
   assert.equal(
     await fs.readFile(path.join(backupsHome, backups[0], 'SKILL.md'), 'utf8'),
     'someone else\n',
@@ -205,6 +239,46 @@ test('doctor reports missing credentials without crashing', async (t) => {
   for (const name of SKILL_NAMES) assert.match(stdout, new RegExp(`/${name}`));
 });
 
+test('link puts back the entries that are ours and reports the ones that are not', async (t) => {
+  const box = await sandbox(t);
+  await cliRun(box.env, ['install', '--no-setup']);
+
+  // One entry deleted by hand, one taken by someone else's skill.
+  await fs.rm(path.join(box.claudeSkills, 'ws-google'));
+  const theirs = path.join(box.claudeSkills, 'ws-slack');
+  await fs.rm(theirs);
+  await fs.mkdir(theirs);
+  await fs.writeFile(path.join(theirs, 'SKILL.md'), 'someone else\n');
+
+  const { code, stdout } = await cliRun(box.env, ['link']);
+  assert.equal(code, 1, stdout);
+
+  const repaired = path.join(box.claudeSkills, 'ws-google');
+  assert.ok((await fs.lstat(repaired)).isSymbolicLink(), 'the deleted entry should be back');
+  assert.equal(await fs.realpath(repaired), await fs.realpath(path.join(box.skills, 'ws-google')));
+
+  // Same wording as install, and their skill is still theirs.
+  assert.match(stdout, /ws-slack: Claude Code cannot see it/);
+  assert.equal(await fs.readFile(path.join(theirs, 'SKILL.md'), 'utf8'), 'someone else\n');
+});
+
+test("doctor does not accept someone else's skill as ours being reachable", async (t) => {
+  const box = await sandbox(t);
+  await cliRun(box.env, ['install', '--no-setup']);
+
+  // A directory of the same name, with a SKILL.md of its own. Asking only
+  // whether a SKILL.md is there would pass this; it reaches nothing of ours.
+  const link = path.join(box.claudeSkills, 'ws-google');
+  await fs.rm(link);
+  await fs.mkdir(link);
+  await fs.writeFile(path.join(link, 'SKILL.md'), 'someone else\n');
+
+  const { stdout } = await cliRun(box.env, ['doctor']);
+  assert.match(stdout, /ws-google: not reachable from Claude Code/);
+  // The skills whose link is intact must still read as fine.
+  assert.doesNotMatch(stdout, /ws-slack: not reachable/);
+});
+
 test('uninstall removes our skills and keeps the tooling and credentials', async (t) => {
   const box = await sandbox(t);
   await cliRun(box.env, ['install', '--no-setup']);
@@ -229,6 +303,37 @@ test('uninstall leaves a skill it did not install alone', async (t) => {
   assert.ok(await fs.stat(path.join(theirs, 'SKILL.md')));
 });
 
+test('uninstall does not call a skill removed when only its link went', async (t) => {
+  const box = await sandbox(t);
+  await cliRun(box.env, ['install', '--no-setup']);
+
+  // The real ws-slack is someone else's now; only the link into it is ours.
+  const theirs = path.join(box.skills, 'ws-slack');
+  await fs.rm(path.join(theirs, '.ws-skills-install'));
+
+  const { stdout } = await cliRun(box.env, ['uninstall']);
+  assert.doesNotMatch(stdout, /ws-slack removed/, 'the skill itself is still there');
+  assert.match(stdout, /ws-slack left alone/);
+  assert.ok(await fs.stat(path.join(theirs, 'SKILL.md')));
+});
+
+test("uninstall says when an agent still reads a skill it could not remove", async (t) => {
+  const box = await sandbox(t);
+  await cliRun(box.env, ['install', '--no-setup']);
+
+  // Ours is gone from Claude Code's directory, someone else's took the name.
+  const theirs = path.join(box.claudeSkills, 'ws-google');
+  await fs.rm(theirs);
+  await fs.mkdir(theirs);
+  await fs.writeFile(path.join(theirs, 'SKILL.md'), 'someone else\n');
+
+  const { stdout } = await cliRun(box.env, ['uninstall']);
+  assert.match(stdout, /ws-google removed/);
+  // "removed" alone would leave the user thinking the name is free everywhere.
+  assert.match(stdout, /ws-google: Claude Code still reads .*ws-google — not ours/);
+  assert.equal(await fs.readFile(path.join(theirs, 'SKILL.md'), 'utf8'), 'someone else\n');
+});
+
 test('uninstall --purge --force deletes the tooling and the credentials', async (t) => {
   const box = await sandbox(t);
   await cliRun(box.env, ['install', '--no-setup']);
@@ -239,111 +344,24 @@ test('uninstall --purge --force deletes the tooling and the credentials', async 
   await assert.rejects(fs.stat(box.tools));
 });
 
-test('an upgrade from the old layout moves the install and keeps the virtualenv', async (t) => {
+test('a link of ours aimed elsewhere is pointed back without --force', async (t) => {
   const box = await sandbox(t);
+  await cliRun(box.env, ['install', '--no-setup']);
 
-  // What an earlier version left behind: tools and skill copies in the config
-  // home, with ~/.claude/skills holding symlinks into it.
-  const legacyTools = path.join(box.home, 'tools');
-  const legacySkills = path.join(box.home, 'skills');
-  await fs.mkdir(path.join(legacyTools, '.venv'), { recursive: true });
-  await fs.writeFile(path.join(legacyTools, '.venv', 'pyvenv.cfg'), 'home = /usr\n');
-  await fs.mkdir(box.claudeSkills, { recursive: true });
-  for (const name of SKILL_NAMES) {
-    await fs.mkdir(path.join(legacySkills, name), { recursive: true });
-    await fs.writeFile(path.join(legacySkills, name, 'SKILL.md'), `---\nname: ${name}\n---\n`);
-    await fs.symlink(path.join(legacySkills, name), path.join(box.claudeSkills, name));
-  }
+  // What moving WS_AGENTS_DIR, or deleting the skill by hand, leaves behind:
+  // our own link, now aimed at nothing. It is ours to repair, not to back up.
+  const link = path.join(box.claudeSkills, 'ws-google');
+  await fs.rm(link);
+  await fs.symlink(path.join(box.home, 'gone', 'ws-google'), link);
 
   const { code, stdout } = await cliRun(box.env, ['install', '--no-setup']);
   assert.equal(code, 0, stdout);
-
-  // Re-downloading every Python dependency on an upgrade is not acceptable, so
-  // the virtualenv moves rather than being rebuilt.
-  assert.equal(await fs.readFile(path.join(box.tools, '.venv', 'pyvenv.cfg'), 'utf8'), 'home = /usr\n');
-  await assert.rejects(fs.stat(legacyTools));
-  await assert.rejects(fs.stat(legacySkills));
-
-  for (const name of SKILL_NAMES) {
-    // The skill itself moved to the agents dir...
-    const dir = path.join(box.skills, name);
-    assert.ok((await fs.lstat(dir)).isDirectory(), `${name} should be real in the agents dir`);
-    assert.ok(await fs.stat(path.join(dir, 'tools', 'main.py')));
-
-    // ...and Claude Code's entry now points there instead of the config home.
-    const link = path.join(box.claudeSkills, name);
-    assert.ok((await fs.lstat(link)).isSymbolicLink(), `${name} should be a link for Claude Code`);
-    assert.equal(await fs.realpath(link), await fs.realpath(dir));
-  }
-});
-
-test('an upgrade that reselects only some integrations leaves the rest untouched', async (t) => {
-  const box = await sandbox(t);
-
-  // Same pre-upgrade legacy layout as above, but this run's .env already
-  // narrows WS_INTEGRATIONS to google+slack — as if ws-backlog was configured
-  // by an earlier version and this run's (non-interactive, so no prompt)
-  // wizard does not reselect it.
-  const legacyTools = path.join(box.home, 'tools');
-  const legacySkills = path.join(box.home, 'skills');
-  await fs.mkdir(path.join(legacyTools, '.venv'), { recursive: true });
-  await fs.writeFile(path.join(legacyTools, '.venv', 'pyvenv.cfg'), 'home = /usr\n');
-  await fs.mkdir(box.claudeSkills, { recursive: true });
-  for (const name of SKILL_NAMES) {
-    await fs.mkdir(path.join(legacySkills, name), { recursive: true });
-    await fs.writeFile(path.join(legacySkills, name, 'SKILL.md'), `---\nname: ${name}\n---\n`);
-    await fs.symlink(path.join(legacySkills, name), path.join(box.claudeSkills, name));
-  }
-  await fs.mkdir(box.home, { recursive: true });
-  await fs.writeFile(path.join(box.home, '.env'), 'WS_INTEGRATIONS=google,slack\n');
-
-  const { code, stdout } = await cliRun(box.env, ['install']);
-  assert.equal(code, 0, stdout);
-
-  assert.ok((await fs.lstat(path.join(box.skills, 'ws-google'))).isDirectory());
-  assert.ok((await fs.lstat(path.join(box.skills, 'ws-slack'))).isDirectory());
-
-  // ws-backlog was not reselected — its previous install must survive, not
-  // vanish silently, and the run must say so.
-  const backlogLink = await fs
-    .readlink(path.join(box.claudeSkills, 'ws-backlog'))
-    .catch(() => null);
-  assert.ok(backlogLink, "ws-backlog should still be the previous version's link, not removed");
-  assert.match(stdout, /ws-backlog: left as the previous version's link/);
-});
-
-test('an upgrade carries the virtualenv over and leaves no second copy behind', async (t) => {
-  const box = await sandbox(t);
-
-  // The layout before the skills moved to the agents dir: the tooling sat in
-  // the Claude skills directory, with the virtualenv uv built inside it.
-  const previousTools = path.join(box.claudeSkills, 'ws-skills-tools');
-  await fs.mkdir(path.join(previousTools, '.venv'), { recursive: true });
-  await fs.writeFile(path.join(previousTools, '.venv', 'pyvenv.cfg'), 'home = /usr\n');
-  await fs.writeFile(path.join(previousTools, 'pyproject.toml'), '[project]\nname = "ws-tools"\n');
-
-  const { code, stdout } = await cliRun(box.env, ['install', '--no-setup']);
-  assert.equal(code, 0, stdout);
-
-  // Hundreds of megabytes: it moves, and the place it came from does not linger.
   assert.equal(
-    await fs.readFile(path.join(box.tools, '.venv', 'pyvenv.cfg'), 'utf8'),
-    'home = /usr\n',
+    await fs.realpath(link),
+    await fs.realpath(path.join(box.skills, 'ws-google')),
+    'the link should point back at the real skill',
   );
-  await assert.rejects(fs.stat(previousTools), 'the previous tooling should be gone');
-});
-
-test('an upgrade leaves a tooling directory that is not ours alone', async (t) => {
-  const box = await sandbox(t);
-
-  // Same path, but somebody else's — no manifest of ours, so it is not ours to delete.
-  const theirs = path.join(box.claudeSkills, 'ws-skills-tools');
-  await fs.mkdir(theirs, { recursive: true });
-  await fs.writeFile(path.join(theirs, 'notes.txt'), 'mine\n');
-
-  const { code } = await cliRun(box.env, ['install', '--no-setup']);
-  assert.equal(code, 0);
-  assert.equal(await fs.readFile(path.join(theirs, 'notes.txt'), 'utf8'), 'mine\n');
+  await assert.rejects(fs.stat(path.join(box.home, 'backups')), 'nothing was ours to move aside');
 });
 
 test('help and version do not touch the filesystem', async (t) => {

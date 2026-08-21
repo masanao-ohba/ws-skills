@@ -14,6 +14,12 @@ export async function uninstallCommand({ purge = false, force = false } = {}) {
     if (result.action === 'removed') ok(`/${skill.name} removed`);
     else if (result.state === 'absent') info(dim(`/${skill.name} was not installed`));
     else warn(`/${skill.name} left alone — ${tildify(result.dir)} is not one of ours`);
+
+    // Not ours to delete, and the agent keeps reading it — say so rather than
+    // letting "removed" imply the name is free everywhere.
+    for (const link of result.left) {
+      warn(`/${skill.name}: ${link.agent.label} still reads ${tildify(link.link)} — not ours`);
+    }
   }
 
   if (!purge) {

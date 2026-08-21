@@ -69,21 +69,6 @@ export const envFile = () => path.join(configHome(), '.env');
  */
 export const backupsDir = () => path.join(configHome(), 'backups');
 
-/** Where earlier versions put the tools and the skill copies. */
-export const legacyToolsDir = () => path.join(configHome(), 'tools');
-export const legacySkillsDir = () => path.join(configHome(), 'skills');
-
-/**
- * Every place an earlier version kept the shared tooling, newest first.
- *
- * The virtualenv uv builds there runs to hundreds of megabytes, so an upgrade
- * moves it rather than rebuilding, and deletes what it leaves behind.
- */
-export const previousToolsDirs = () => [
-  path.join(claudeDir(), 'skills', TOOLS_DIRNAME),
-  legacyToolsDir(),
-];
-
 export function tildify(p) {
   const home = os.homedir();
   return p.startsWith(home + path.sep) ? `~${p.slice(home.length)}` : p;
