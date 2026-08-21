@@ -11,7 +11,7 @@ import { packageRoot } from './lib/paths.mjs';
 import { bold, dim } from './lib/ui.mjs';
 
 const USAGE = `
-${bold('ws-skills')} — install the ws-* Claude Code skills and the tooling behind them
+${bold('ws-skills')} — install the ws-* agent skills and the tooling behind them
 
   ${bold('npx @masanao-ohba/ws-skills')}            install and set up (the default)
 

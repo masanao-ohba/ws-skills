@@ -1,7 +1,7 @@
 {
   "name": "@masanao-ohba/ws-skills",
   "version": "0.1.0",
-  "description": "Installs three Claude Code skills — /ws-google, /ws-slack, /ws-backlog — for fetching and updating Google Workspace, Slack, and Backlog material, and walks you through the credentials they need.",
+  "description": "Installs three agent skills — /ws-google, /ws-slack, /ws-backlog — for fetching and updating Google Workspace, Slack, and Backlog material, and walks you through the credentials they need. Works with GitHub Copilot, Claude Code, and any agent that reads the Agent Skills format.",
   "type": "module",
   "bin": {
     "ws-skills": "bin/cli.mjs"
@@ -22,8 +22,11 @@
     "test": "node --test test/*.test.mjs && python3 payload/tools/tests/test_slack_api.py && python3 payload/tools/tests/test_ws_paths.py && python3 payload/tools/tests/test_slack_channels.py"
   },
   "keywords": [
+    "agent-skills",
     "claude",
     "claude-code",
+    "github-copilot",
+    "copilot",
     "skills",
     "slack",
     "backlog",

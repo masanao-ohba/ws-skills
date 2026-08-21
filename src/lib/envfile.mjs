@@ -90,7 +90,7 @@ function isKnown(key) {
  */
 export function renderEnv(values) {
   const lines = [
-    '# Settings for the ws-* Claude Code skills.',
+    '# Settings for the ws-* agent skills.',
     '# Written by `ws-skills setup`. Safe to edit by hand — a later setup run',
     '# keeps whatever it finds here as the default.',
     '#',

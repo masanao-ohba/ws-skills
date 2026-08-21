@@ -21,7 +21,7 @@ Resolved from the process environment, then `.env` in the current directory, the
 ## Usage
 
 ```bash
-T=~/.claude/skills/ws-backlog/tools
+T=~/.agents/skills/ws-backlog/tools
 WS="uv run --project $T python $T/main.py"
 
 # snapshot one issue with every comment

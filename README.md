@@ -34,7 +34,7 @@ Nothing is uploaded anywhere; credentials stay on your machine in
 
 | | |
 |---|---|
-| **Claude Code** | the skills install into `~/.claude/skills/` |
+| **A skills-aware agent** | the skills install into `~/.agents/skills/`, which Claude Code reaches through a link of its own. See [Which agents can use these](#which-agents-can-use-these). |
 | **Node ≥ 18.17** | runs the installer (nothing else — it has no dependencies) |
 | **[uv](https://docs.astral.sh/uv/)** | runs the Python side. `brew install uv` or `curl -LsSf https://astral.sh/uv/install.sh \| sh`. It brings its own Python. |
 
@@ -160,11 +160,14 @@ A few things to expect:
 ## Where things live
 
 ```
-~/.claude/skills/
+~/.agents/skills/
 ├── ws-skills-tools/   the CLI the skills call (one copy, shared)
 ├── ws-google/         SKILL.md + tools -> ../ws-skills-tools
 ├── ws-slack/          SKILL.md + tools -> ../ws-skills-tools
 └── ws-backlog/        SKILL.md + tools -> ../ws-skills-tools
+
+~/.claude/skills/
+└── ws-*  ->  ../../.agents/skills/ws-*    Claude Code reads only its own directory
 
 ~/.config/ws-skills/
 ├── google/   OAuth clients and tokens   (chmod 600)
@@ -176,10 +179,28 @@ A skill and the code it runs sit together, so every command in a SKILL.md is a p
 inside that skill. The config directory holds credentials and settings only — nothing
 there has to be found or read to run a skill.
 
-Settings resolve in this order: process environment → `.env` in the directory Claude
-Code is running in → that shared `.env`. So a project can override anything locally.
-`WS_SKILLS_HOME` moves the credentials directory; `CLAUDE_CONFIG_DIR` points at a
-Claude Code config other than `~/.claude`.
+There is one real copy of each skill, and agents that read a directory of their own
+get a link to it. Nothing is duplicated, so an upgrade cannot leave two versions of a
+skill disagreeing with each other.
+
+Settings resolve in this order: process environment → `.env` in the directory the agent
+is running in → that shared `.env`. So a project can override anything locally.
+`WS_SKILLS_HOME` moves the credentials directory, `WS_AGENTS_DIR` the skills directory,
+and `CLAUDE_CONFIG_DIR` points at a Claude Code config other than `~/.claude`.
+
+## Which agents can use these
+
+The skills are [Agent Skills](https://agentskills.io), the format Anthropic released as
+an open standard, so they are not tied to one agent.
+
+| | |
+|---|---|
+| **GitHub Copilot** | reads `~/.agents/skills/` directly — CLI, cloud agent, code review, VS Code and JetBrains agent mode. Nothing extra to install. |
+| **Claude Code** | reads only `~/.claude/skills/`, so the installer links each skill into it. |
+| **Other agents** | Cursor, Gemini CLI, Codex and others read `~/.agents/skills/` too. |
+
+Verify what an agent picked up with its own listing — `copilot skill list` for Copilot,
+`/skills` for Claude Code.
 
 ## Troubleshooting
 

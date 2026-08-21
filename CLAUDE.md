@@ -11,8 +11,9 @@ the user through the credentials each one needs.
 Two languages, one job each:
 
 - **Node (`bin/`, `src/`)** — the installer only. Zero runtime dependencies, so
-  `npx` starts immediately. It copies `payload/` into `~/.claude/skills/` and writes
-  the credentials into `~/.config/ws-skills/`.
+  `npx` starts immediately. It copies `payload/` into `~/.agents/skills/`, links that
+  into each agent that reads a directory of its own, and writes the credentials into
+  `~/.config/ws-skills/`.
 - **Python (`payload/tools/`)** — everything that touches an API. Run through `uv`;
   the user never installs Python packages by hand.
 
@@ -36,9 +37,10 @@ payload/tools/tests/     unittest for output paths, channel resolution, and the
 After installation:
 
 ```
-~/.claude/skills/ws-skills-tools/       the Python CLI, one shared copy
-~/.claude/skills/ws-*/SKILL.md          the skill
-~/.claude/skills/ws-*/tools  ->  ../ws-skills-tools
+~/.agents/skills/ws-skills-tools/       the Python CLI, one shared copy
+~/.agents/skills/ws-*/SKILL.md          the skill
+~/.agents/skills/ws-*/tools  ->  ../ws-skills-tools
+~/.claude/skills/ws-*  ->  ../../.agents/skills/ws-*
 ~/.config/ws-skills/{google,slack,.env} credentials and settings only
 ```
 
@@ -46,6 +48,14 @@ A skill carries the code it runs, so every command a SKILL.md documents is a pat
 inside that skill — nothing has to go looking through a config directory to find
 the implementation. The tooling is shared rather than copied per skill because the
 virtualenv uv builds runs to hundreds of megabytes.
+
+The skills live in `~/.agents/skills/` because that is the vendor-neutral personal
+location in the [Agent Skills](https://agentskills.io) format: Copilot and the other
+adopters read it directly. Claude Code reads only its own directory, so it gets a
+link — `AGENT_LINKS` in `paths.mjs` is the whole list of agents needing one, and an
+agent that reads `~/.agents/skills` itself belongs nowhere in it. Keeping exactly one
+real copy is what lets a SKILL.md name an absolute path to its own tooling; two copies
+would need the path rewritten per location and could drift apart on an upgrade.
 
 Neither location may be inside the package: `npx` unpacks into a cache that gets
 wiped, and what is installed has to outlive it.

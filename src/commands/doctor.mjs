@@ -4,6 +4,8 @@ import path from 'node:path';
 import { exists } from '../lib/fsx.mjs';
 import { readEnvFile } from '../lib/envfile.mjs';
 import {
+  AGENT_LINKS,
+  agentSkillLink,
   configHome,
   envFile,
   googleDir,
@@ -22,6 +24,8 @@ import { bad, bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../
 const RUN_AUTH = 'npx @masanao-ohba/ws-skills auth';
 
 const RUN_SETUP = 'npx @masanao-ohba/ws-skills setup';
+
+const RUN_LINK = 'npx @masanao-ohba/ws-skills link';
 
 async function checkTooling() {
   heading('Tooling');
@@ -66,11 +70,24 @@ async function checkInstall() {
       continue;
     }
     // Every command in SKILL.md runs through this link.
-    if (await exists(path.join(skillToolsLink(skill.name), 'main.py'))) {
-      ok(`/${skill.name}`);
-    } else {
+    if (!(await exists(path.join(skillToolsLink(skill.name), 'main.py')))) {
       bad(`/${skill.name}: ${tildify(skillToolsLink(skill.name))} does not reach the tooling`);
       problems += 1;
+      continue;
+    }
+
+    // Agents reading ~/.agents/skills need nothing; the rest need their link.
+    const missing = [];
+    for (const agent of AGENT_LINKS) {
+      if (!(await exists(path.join(agentSkillLink(agent, skill.name), 'SKILL.md')))) {
+        missing.push(agent.label);
+      }
+    }
+    if (missing.length) {
+      bad(`/${skill.name}: not reachable from ${missing.join(', ')} — run ${bold(RUN_LINK)}`);
+      problems += 1;
+    } else {
+      ok(`/${skill.name}`);
     }
   }
   return problems;

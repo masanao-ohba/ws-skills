@@ -25,7 +25,7 @@ which needs the token to download.
 ## Usage
 
 ```bash
-T=~/.claude/skills/ws-slack/tools
+T=~/.agents/skills/ws-slack/tools
 WS="uv run --project $T python $T/main.py"
 
 # a channel by name, bounded by date — this is the normal call

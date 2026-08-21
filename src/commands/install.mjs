@@ -5,10 +5,13 @@ import { authorize } from './auth.mjs';
 import { ensureDir, exists, syncDir } from '../lib/fsx.mjs';
 import { confirm, interactive } from '../lib/prompt.mjs';
 import {
+  AGENT_LINKS,
+  agentSkillLink,
   configHome,
   legacySkillsDir,
   legacyToolsDir,
   packageRoot,
+  previousToolsDirs,
   skillsDir,
   tildify,
   toolsDir,
@@ -26,22 +29,45 @@ import { runWizard } from './setup.mjs';
  * are installed — the entries an earlier version made are symlinks into it.
  */
 async function carryLegacyVenv() {
-  if (!(await exists(legacyToolsDir()))) return;
-
-  const from = path.join(legacyToolsDir(), '.venv');
   const to = path.join(toolsDir(), '.venv');
-  if ((await exists(from)) && !(await exists(to))) {
+  if (await exists(to)) return;
+
+  for (const dir of previousToolsDirs()) {
+    const from = path.join(dir, '.venv');
+    if (!(await exists(from))) continue;
+
     await ensureDir(toolsDir());
     try {
       await fs.rename(from, to);
     } catch {
       warn('could not move the Python virtualenv — uv will rebuild it on the first run');
     }
+    return;
   }
 }
 
 /**
- * Delete the old layout, and every ~/.claude/skills entry still pointing into it.
+ * Delete a tooling directory an earlier version left behind.
+ *
+ * Only ours: the sync writes `pyproject.toml` naming the project, and nothing
+ * else would. Left in place it is hundreds of megabytes of virtualenv nobody
+ * reaches any more.
+ */
+async function removePreviousTooling() {
+  for (const dir of previousToolsDirs()) {
+    if (dir === toolsDir() || !(await exists(dir))) continue;
+    const manifest = await fs
+      .readFile(path.join(dir, 'pyproject.toml'), 'utf8')
+      .catch(() => '');
+    if (!manifest.includes('name = "ws-tools"')) continue;
+
+    await fs.rm(dir, { recursive: true, force: true });
+    info(dim(`removed the tooling an earlier version left at ${tildify(dir)}`));
+  }
+}
+
+/**
+ * Delete the old layout, and every agent's entry still pointing into it.
  *
  * A skill chosen this run is already migrated by `installSkill` before this
  * runs, so it is no longer a legacy symlink here. Anything still a legacy
@@ -54,21 +80,28 @@ async function removeLegacyInstall() {
   if (!(await exists(legacyToolsDir())) && !(await exists(legacySkillsDir()))) return;
 
   let remaining = false;
-  for (const skill of SKILLS) {
-    const entry = path.join(skillsDir(), skill.name);
-    const target = await fs.readlink(entry).catch(() => null);
-    if (!target || !path.resolve(path.dirname(entry), target).startsWith(configHome() + path.sep)) {
-      continue;
-    }
+  for (const agent of AGENT_LINKS) {
+    for (const skill of SKILLS) {
+      const entry = agentSkillLink(agent, skill.name);
+      const target = await fs.readlink(entry).catch(() => null);
+      if (
+        !target ||
+        !path.resolve(path.dirname(entry), target).startsWith(configHome() + path.sep)
+      ) {
+        continue;
+      }
 
-    const remove =
-      interactive() &&
-      (await confirm(`  /${skill.name} is still the previous version's link — remove it?`, false));
-    if (remove) {
-      await fs.rm(entry, { force: true });
-    } else {
-      warn(`/${skill.name}: left as the previous version's link (re-select it next time to migrate)`);
-      remaining = true;
+      const remove =
+        interactive() &&
+        (await confirm(`  /${skill.name} is still the previous version's link — remove it?`, false));
+      if (remove) {
+        await fs.rm(entry, { force: true });
+      } else {
+        warn(
+          `/${skill.name}: left as the previous version's link (re-select it next time to migrate)`,
+        );
+        remaining = true;
+      }
     }
   }
 
@@ -145,14 +178,14 @@ function nextSteps(integrations, pending) {
     info('');
   }
 
-  info('Start a new Claude Code session, then ask for what you need:');
+  info('Start a new session in your agent, then ask for what you need:');
   for (const integration of integrations) info(dim(`  ${EXAMPLES[integration]}`));
   flowEnd(`check anything still missing with ${bold('npx @masanao-ohba/ws-skills doctor')}`);
 }
 
 export async function installCommand({ force = false, skipSetup = false } = {}) {
   flowStart('ws-skills');
-  info('Installs the ws-* Claude Code skills and the tooling behind them.');
+  info('Installs the ws-* agent skills and the tooling behind them.');
   info(dim(`skills: ${tildify(skillsDir())}`));
   info(dim(`credentials: ${tildify(configHome())}`));
 
@@ -163,9 +196,10 @@ export async function installCommand({ force = false, skipSetup = false } = {}) 
   const wizard = skipSetup ? null : await runWizard();
   const integrations = wizard ? wizard.integrations : SKILLS.map((s) => s.integration);
 
-  heading('Installing the skills into Claude Code');
+  heading('Installing the skills');
   const conflicts = await installChosen(integrations, { force });
   await removeLegacyInstall();
+  await removePreviousTooling();
 
   // Credentials collected is not the same as authorized: Google needs a consent
   // flow and Slack may need a sign-in, both interactive.

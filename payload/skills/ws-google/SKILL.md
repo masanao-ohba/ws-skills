@@ -15,7 +15,7 @@ Drive write scope at all.
 ## Running the tools
 
 ```bash
-T=~/.claude/skills/ws-google/tools
+T=~/.agents/skills/ws-google/tools
 WS="uv run --project $T python $T/main.py"
 
 $WS auth --check     # status of every profile and token
