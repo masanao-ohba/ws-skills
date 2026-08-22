@@ -6,7 +6,7 @@ import { readEnvFile, renderEnv } from '../lib/envfile.mjs';
 import { ask, askSecret, confirm, interactive, selectMany, selectOne } from '../lib/prompt.mjs';
 import { configHome, envFile, googleDir, slackDir, tildify } from '../lib/paths.mjs';
 import { INTEGRATIONS, SKILLS } from '../lib/skills.mjs';
-import { bar, bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../lib/ui.mjs';
+import { bar, dim, heading, info, ok, warn } from '../lib/ui.mjs';
 
 const expand = (p) => (p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p);
 
@@ -284,22 +284,3 @@ export async function runWizard({ only = null } = {}) {
   return { values, integrations: chosen };
 }
 
-export async function setupCommand() {
-  flowStart('ws-skills setup');
-  const { values, integrations } = await runWizard();
-  info(`configured: ${integrations.join(', ') || 'nothing'}`);
-
-  // Changing a credential often changes what still needs authorizing. Imported
-  // lazily because auth.mjs reads configuredIntegrations from this module.
-  const { authorize } = await import('./auth.mjs');
-  const pending = interactive() ? await authorize(values) : [];
-
-  if (pending.length) {
-    heading('Still to do');
-    for (const item of pending) info(`- ${item}`);
-    flowEnd(`run ${bold('npx @masanao-ohba/ws-skills auth')} to pick these up`);
-    return 1;
-  }
-  flowEnd(`done — check anything missing with ${bold('npx @masanao-ohba/ws-skills doctor')}`);
-  return 0;
-}

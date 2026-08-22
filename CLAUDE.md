@@ -4,7 +4,7 @@ Guidance for working in this repository.
 
 ## What this is
 
-An npm package (`@masanao-ohba/ws-skills`) that installs three Claude Code skills —
+An npm package (`@masanao-ohba/ws-skills`) that installs three agent skills —
 `/ws-google`, `/ws-slack`, `/ws-backlog` — plus the Python CLI they call, and walks
 the user through the credentials each one needs.
 
@@ -22,11 +22,13 @@ Two languages, one job each:
 ```
 bin/cli.mjs              entry point
 src/cli.mjs              argument parsing and dispatch
-src/commands/            install, setup, auth, link, doctor, uninstall
+src/commands/            install, update, auth, doctor, uninstall
+                         setup.mjs is the credentials wizard install runs,
+                         not a command of its own
 src/lib/                 paths, prompts, .env rendering, skill installation,
                          prerequisites, and tools.mjs — the only place that
                          spawns the Python CLI
-payload/skills/<name>/SKILL.md   what Claude reads
+payload/skills/<name>/SKILL.md   what the agent reads
 payload/tools/main.py            the CLI's argparse surface
 payload/tools/scripts/           one module per source; slack_scraper/ is vendored
 test/                    node:test for the installer
@@ -90,7 +92,7 @@ wiped, and what is installed has to outlive it.
   other means — that is what the old sidebar sweep forced, and it cost minutes a run.
 - **English everywhere** in the package: code, comments, docs, prompts.
 - **The Python CLI is not a user surface.** People drive `npx @masanao-ohba/ws-skills`;
-  Claude drives `main.py` through the skills. Anything a person has to do — a consent
+  the agent drives `main.py` through the skills. Anything a person has to do — a consent
   screen, a sign-in, a browser download — is run *for* them by `commands/auth.mjs`, never
   printed as a command to copy. Keep raw `uv run …` lines out of the README, out of the
   installer's output, and out of what the skills tell users to do.
@@ -101,8 +103,12 @@ wiped, and what is installed has to outlive it.
 npm test    # node:test installer suite + Python fixture tests
 ```
 
-The installer tests run against a throwaway `WS_SKILLS_HOME` / `CLAUDE_CONFIG_DIR`,
-so they never touch the developer's real Claude Code config. Keep it that way.
+The installer tests run against a throwaway `HOME`, plus a `WS_SKILLS_HOME` and a
+`CLAUDE_CONFIG_DIR` inside it, so they never touch the developer's real skills or
+config. `~/.agents/skills` has no setting of its own — a SKILL.md names an absolute
+path to its own tooling, so the location cannot move — and a home of our own is what
+keeps a run off the real one. Keep it that way: a test hook in `src/` would be a
+setting users could find.
 
 The Slack **API** backend's normalization is fixture-driven — any change to
 `slack_api.py` needs a matching case in `payload/tools/tests/test_slack_api.py`.

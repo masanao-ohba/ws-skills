@@ -7,7 +7,7 @@ browser untouched.
     <tools> slack --channel D0123456789 --from-app --team-id T0123456789
     <tools> channels --query release
 
-Sessions: `state.json` in the tooling home (written by `slack-signin`, or by the
+Sessions: `state.json` in the config home (written by `slack-signin`, or by the
 scripted login when SLACK_EMAIL / SLACK_PASSWORD are set). `--from-app` borrows the
 desktop app's live session instead, which is the only way in for a workspace that
 signs in through Google — Playwright cannot drive that flow.

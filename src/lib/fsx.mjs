@@ -60,8 +60,3 @@ export async function copySecret(src, dest) {
   await fs.copyFile(src, dest);
   await fs.chmod(dest, 0o600);
 }
-
-/** `2026-08-17T091500` — a suffix that sorts and never collides in practice. */
-export function timestampSuffix(now = new Date()) {
-  return now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '');
-}

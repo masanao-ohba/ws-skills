@@ -1,6 +1,6 @@
 """Slack Web authentication via Playwright.
 
-The saved session (a Playwright storage_state) lives in the tooling home, not in
+The saved session (a Playwright storage_state) lives in the config home, not in
 the working directory, so collection can be run from any project.
 """
 

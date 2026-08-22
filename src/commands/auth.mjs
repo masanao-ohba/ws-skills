@@ -27,7 +27,7 @@ async function authorizeGoogle(values, { force }) {
     const suffix = profileSuffix(profile);
     const client = path.join(googleDir(), `credentials${suffix}.json`);
     if (!(await exists(client))) {
-      bad(`${profile}: no OAuth client yet — run setup again and point it at the JSON`);
+      bad(`${profile}: no OAuth client yet — run the installer again and point it at the JSON`);
       pending.push(`Google (${profile}): add the OAuth client JSON`);
       continue;
     }
@@ -84,8 +84,8 @@ async function authorizeSlack(values, { force }) {
       ok('API backend: the token is all it needs');
       return [];
     }
-    bad('API backend selected but no token stored — run setup again');
-    return ['Slack: store an API token (run setup)'];
+    bad('API backend selected but no token stored — run the installer again');
+    return ['Slack: store an API token (run the installer again)'];
   }
 
   const pending = [];

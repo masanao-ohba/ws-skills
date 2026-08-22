@@ -6,7 +6,7 @@ mistake. Writing uses a separate per-service token (`token_sheets.json` /
 
 Multiple accounts are supported through profiles. Set GOOGLE_PROFILES to a comma
 separated list; each profile keeps its own OAuth client and token files in the
-tooling home's `google/` directory:
+config home's `google/` directory:
 
     default        credentials.json          token_readonly.json
     <name>         credentials_<name>.json   token_readonly_<name>.json

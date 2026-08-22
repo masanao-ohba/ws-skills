@@ -1,9 +1,10 @@
 # ws-skills
 
-**Three [Claude Code](https://claude.com/claude-code) skills that fetch your team's
-working history out of Google Workspace, Slack and Backlog — and, for Google, write
-some back.** One `npx` command installs them and takes you through every credential
-they need.
+**Three [agent skills](https://agentskills.io) that fetch your team's working history
+out of Google Workspace, Slack and Backlog — and, for Google, write some back.** One
+`npx` command installs them and takes you through every credential they need. They
+work in GitHub Copilot, [Claude Code](https://claude.com/claude-code) and anything
+else that reads the format.
 
 [![npm](https://img.shields.io/npm/v/@masanao-ohba/ws-skills?logo=npm&color=cb3837)](https://www.npmjs.com/package/@masanao-ohba/ws-skills)
 [![node](https://img.shields.io/badge/node-%E2%89%A518.17-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
@@ -24,7 +25,7 @@ npx @masanao-ohba/ws-skills
 | **`/ws-slack`** | Channels, DMs and thread replies → JSON. Works **with or without** a Slack API token. |
 | **`/ws-backlog`** | Issues with every comment · project overviews · issue search · wikis · activities. Read-only. |
 
-Everything is written to `references/raw-source/` under the directory Claude Code is
+Everything is written to `references/raw-source/` under the directory your agent is
 running in, so each project keeps its own material. That directory is created with a
 `.gitignore` of its own, so fetched workspace material never rides along in a commit.
 Nothing is uploaded anywhere; credentials stay on your machine in
@@ -44,13 +45,13 @@ Nothing is uploaded anywhere; credentials stay on your machine in
 npx @masanao-ohba/ws-skills
 ```
 
-That single command copies the tooling, links the skills into Claude Code, asks which
-of the three you want and collects their credentials — then walks you through the
-steps that need a person: the Google consent screen, the Slack sign-in, the one-time
-Chromium download. Skip any of them and it says so; nothing is left for you to piece
-together from a terminal afterwards.
+That single command copies the tooling, installs the skills where your agent reads
+them, asks which of the three you want and collects their credentials — then walks you
+through the steps that need a person: the Google consent screen, the Slack sign-in, the
+one-time Chromium download. Skip any of them and it says so; nothing is left for you to
+piece together from a terminal afterwards.
 
-Then **start a new Claude Code session** and the skills are there.
+Then **start a new session in your agent** and the skills are there.
 
 Have the relevant piece below to hand before you start.
 
@@ -122,8 +123,8 @@ issues `GET` only — there is no write path in it at all.
 
 ## Using the skills
 
-In Claude Code, just ask. The skills tell Claude the rest — which tool to reach for,
-what it can and cannot see, and where to put what comes back.
+Just ask. The skills tell the agent the rest — which tool to reach for, what it can
+and cannot see, and where to put what comes back.
 
 > *"Snapshot Backlog issue ABC123-45."*
 > *"Save #release since April 1 and summarise what changed."*
@@ -150,11 +151,10 @@ A few things to expect:
 
 | | |
 |---|---|
-| `npx @masanao-ohba/ws-skills` | install: copy the tooling, install the skills, ask for credentials, authorize |
+| `npx @masanao-ohba/ws-skills` | the first run, and any change to credentials |
+| `… update` | bring the tooling and the skills to this version — credentials untouched, nothing asked |
 | `… auth` | run the authorization steps again (`--force` re-runs finished ones) |
-| `… setup` | change credentials |
 | `… doctor` | what is installed, authorized, and missing |
-| `… link` | re-install the skills only, leaving credentials alone |
 | `… uninstall` | remove the skills (`--purge` deletes the tooling and credentials too) |
 
 ## Where things live
@@ -185,8 +185,10 @@ skill disagreeing with each other.
 
 Settings resolve in this order: process environment → `.env` in the directory the agent
 is running in → that shared `.env`. So a project can override anything locally.
-`WS_SKILLS_HOME` moves the credentials directory, `WS_AGENTS_DIR` the skills directory,
-and `CLAUDE_CONFIG_DIR` points at a Claude Code config other than `~/.claude`.
+`WS_SKILLS_HOME` moves the credentials directory, and `CLAUDE_CONFIG_DIR` points at a
+Claude Code config other than `~/.claude`. The skills directory itself does not move:
+each SKILL.md names an absolute path to its own tooling, so `~/.agents/skills` is where
+they have to be.
 
 ## Which agents can use these
 
@@ -206,7 +208,7 @@ Verify what an agent picked up with its own listing — `copilot skill list` for
 
 | symptom | cause |
 |---|---|
-| Skills do not appear in Claude Code | run `doctor`, then start a new session |
+| Skills do not appear in your agent | run `doctor`, then start a new session |
 | `uv: command not found` | install uv (see [Requirements](#requirements)) |
 | Google `404` on a file you can open | shared drive, wrong file type, or genuinely no permission — a 404 does not distinguish them |
 | Doc comments missing | they live on the Drive item, not in the body, and resolved threads vanish from the UI — ask for the comments explicitly |

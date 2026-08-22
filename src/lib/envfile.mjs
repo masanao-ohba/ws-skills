@@ -91,7 +91,7 @@ function isKnown(key) {
 export function renderEnv(values) {
   const lines = [
     '# Settings for the ws-* agent skills.',
-    '# Written by `ws-skills setup`. Safe to edit by hand — a later setup run',
+    '# Written by the ws-skills installer. Safe to edit by hand — a later run',
     '# keeps whatever it finds here as the default.',
     '#',
     '# Resolution order: process environment > ./.env > this file.',

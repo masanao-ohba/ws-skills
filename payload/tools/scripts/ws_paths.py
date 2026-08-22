@@ -1,7 +1,7 @@
 """Path and environment resolution for the ws-* skills.
 
 Settings resolve in this order: the process environment, a `.env` in the current
-working directory, then the shared `.env` in the tooling home. Output paths
+working directory, then the shared `.env` in the config home. Output paths
 default to the current working directory unless WS_OUTPUT_DIR says otherwise.
 """
 
@@ -17,7 +17,7 @@ def _xdg_config_home() -> Path:
 
 
 def home() -> Path:
-    """Tooling home: credentials, the shared .env, and the installed tools."""
+    """Credentials and the shared .env. The tooling itself lives with the skills."""
     return Path(os.environ.get("WS_SKILLS_HOME") or _xdg_config_home() / "ws-skills")
 
 

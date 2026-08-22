@@ -43,7 +43,7 @@ def stub_browser(test, resolve):
 
 
 class SandboxedHome(unittest.TestCase):
-    """Each test gets its own tooling home, so no cache survives into the next."""
+    """Each test gets its own config home, so no cache survives into the next."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

@@ -22,7 +22,7 @@ directory (override with WS_OUTPUT_DIR), so each project collects its own materi
     uv run python main.py bl-digest ABC123-45
 
 Credentials resolve from the process environment, then `.env` in the current
-directory, then the shared `.env` in the tooling home. Run `ws-skills setup` to
+directory, then the shared `.env` in the config home. Run `ws-skills setup` to
 fill the shared one in.
 """
 

@@ -16,16 +16,16 @@ import {
   tildify,
   toolsDir,
 } from '../lib/paths.mjs';
-import { SKILLS, skillStatus } from '../lib/skills.mjs';
+import { SKILLS } from '../lib/skills.mjs';
 import { playwrightBrowsersInstalled, pythonVersion, uvVersion, UV_INSTALL_HINT } from '../lib/prereq.mjs';
 import { configuredIntegrations } from './setup.mjs';
 import { bad, bold, dim, flowEnd, flowStart, heading, info, ok, warn } from '../lib/ui.mjs';
 
 const RUN_AUTH = 'npx @masanao-ohba/ws-skills auth';
 
-const RUN_SETUP = 'npx @masanao-ohba/ws-skills setup';
+const RUN_INSTALL = 'npx @masanao-ohba/ws-skills';
 
-const RUN_LINK = 'npx @masanao-ohba/ws-skills link';
+const RUN_UPDATE = 'npx @masanao-ohba/ws-skills update';
 
 async function checkTooling() {
   heading('Tooling');
@@ -48,24 +48,13 @@ async function checkInstall() {
   if (await exists(path.join(toolsDir(), 'main.py'))) {
     ok(`tooling at ${tildify(toolsDir())}`);
   } else {
-    bad(`tooling missing — run ${bold('npx @masanao-ohba/ws-skills')}`);
+    bad(`tooling missing — run ${bold(RUN_UPDATE)}`);
     problems += 1;
   }
 
   for (const skill of SKILLS) {
-    const status = await skillStatus(skill.name);
-    if (status.state === 'absent') {
-      bad(`/${skill.name}: not installed`);
-      problems += 1;
-      continue;
-    }
-    if (status.state !== 'ours') {
-      warn(`/${skill.name}: ${tildify(status.dir)} is not one of ours`);
-      problems += 1;
-      continue;
-    }
     if (!(await exists(path.join(skillDir(skill.name), 'SKILL.md')))) {
-      bad(`/${skill.name}: SKILL.md missing`);
+      bad(`/${skill.name}: not installed — run ${bold(RUN_UPDATE)}`);
       problems += 1;
       continue;
     }
@@ -86,7 +75,7 @@ async function checkInstall() {
       if (reached !== real) missing.push(agent.label);
     }
     if (missing.length) {
-      bad(`/${skill.name}: not reachable from ${missing.join(', ')} — run ${bold(RUN_LINK)}`);
+      bad(`/${skill.name}: not reachable from ${missing.join(', ')} — run ${bold(RUN_UPDATE)}`);
       problems += 1;
     } else {
       ok(`/${skill.name}`);
@@ -98,7 +87,7 @@ async function checkInstall() {
 async function checkSettings(values) {
   heading(`Credentials ${dim(tildify(configHome()))}`);
   if (!(await exists(envFile()))) {
-    bad(`no settings file — run ${bold(RUN_SETUP)}`);
+    bad(`no settings file — run ${bold(RUN_INSTALL)}`);
     return 1;
   }
   const mode = (await fs.stat(envFile())).mode & 0o777;

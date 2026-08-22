@@ -33,7 +33,6 @@ export function claudeDir() {
  * path to its own tooling.
  */
 export function agentsDir() {
-  if (process.env.WS_AGENTS_DIR) return path.resolve(process.env.WS_AGENTS_DIR);
   return path.join(os.homedir(), '.agents');
 }
 
@@ -62,12 +61,6 @@ export const agentSkillLink = (agent, name) => path.join(agent.dir(), name);
 export const googleDir = () => path.join(configHome(), 'google');
 export const slackDir = () => path.join(configHome(), 'slack');
 export const envFile = () => path.join(configHome(), '.env');
-
-/**
- * Where a replaced foreign skill is moved aside. Outside every skills directory,
- * so no agent discovers the old SKILL.md as a duplicate skill.
- */
-export const backupsDir = () => path.join(configHome(), 'backups');
 
 export function tildify(p) {
   const home = os.homedir();

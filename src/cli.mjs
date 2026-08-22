@@ -4,9 +4,8 @@ import path from 'node:path';
 import { authCommand } from './commands/auth.mjs';
 import { doctorCommand } from './commands/doctor.mjs';
 import { installCommand } from './commands/install.mjs';
-import { setupCommand } from './commands/setup.mjs';
 import { uninstallCommand } from './commands/uninstall.mjs';
-import { linkCommand } from './commands/link.mjs';
+import { updateCommand } from './commands/update.mjs';
 import { packageRoot } from './lib/paths.mjs';
 import { bold, dim } from './lib/ui.mjs';
 
@@ -16,23 +15,21 @@ ${bold('ws-skills')} — install the ws-* agent skills and the tooling behind th
   ${bold('npx @masanao-ohba/ws-skills')}            install and set up (the default)
 
 Commands
-  install      copy the tooling, install the skills, ask for credentials, authorize
-  setup        ask for credentials again (nothing is copied or installed)
+  install      the first run, and any change to credentials
+  update       bring the tooling and the skills to this version — credentials untouched
   auth         run the authorization steps that need a person (Google, Slack)
-  link         re-install the skills only, leaving credentials alone
   doctor       report what is installed, authorized, and missing
   uninstall    remove the skills (--purge also deletes the tooling and credentials)
 
 Options
-  --force      install: overwrite an existing skill entry (moved to the config home's backups/)
-               auth: re-run steps that are already done
-  --no-setup   install without asking for credentials
+  --force      auth: re-run steps that are already done
   --purge      uninstall: also delete the tooling and the credentials
   -h, --help   this message
   -v, --version
 
 Environment
-  WS_SKILLS_HOME     where to install (default: ~/.config/ws-skills)
+  WS_SKILLS_HOME     credentials and settings (default: ~/.config/ws-skills)
+                     the skills themselves always go to ~/.agents/skills
   CLAUDE_CONFIG_DIR  where Claude Code keeps its config (default: ~/.claude)
 `;
 
@@ -42,7 +39,6 @@ function parseArgs(argv) {
   return {
     command: positional[0] ?? 'install',
     force: flags.has('--force') || flags.has('-f'),
-    skipSetup: flags.has('--no-setup'),
     purge: flags.has('--purge'),
     help: flags.has('--help') || flags.has('-h'),
     version: flags.has('--version') || flags.has('-v'),
@@ -70,17 +66,15 @@ export async function run(argv) {
 
   switch (args.command) {
     case 'install':
-      return installCommand({ force: args.force, skipSetup: args.skipSetup });
-    case 'setup':
-      return setupCommand();
+      return installCommand();
+    case 'update':
+      return updateCommand();
     case 'auth':
       return authCommand({ force: args.force });
-    case 'link':
-      return linkCommand({ force: args.force });
     case 'doctor':
       return doctorCommand();
     case 'uninstall':
-      return uninstallCommand({ purge: args.purge, force: args.force });
+      return uninstallCommand({ purge: args.purge });
     default:
       console.log(USAGE);
       console.error(`\nunknown command: ${args.command}`);
