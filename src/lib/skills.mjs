@@ -27,19 +27,15 @@ export const INTEGRATIONS = SKILLS.map((s) => s.integration);
  * Put the skill at ~/.agents/skills/<name>, with its `tools` link, and point
  * every agent that needs its own entry at it.
  *
- * Whatever holds either path is replaced, without asking. Telling our own
- * install from a same-named skill of someone else's would need a marker inside
- * the directory, and a marker is only worth the chance that nobody else writes
- * the same file — a judgement with holes is worse than no judgement, because it
- * reads as a guarantee. So these three names belong to this package: install
- * takes them, and `uninstall` gives them back the same way.
+ * These three skill names belong to this package: whatever holds either path is
+ * replaced, without asking.
  */
 export async function installSkill(name, source) {
   const dir = skillDir(name);
   await fs.mkdir(skillsDir(), { recursive: true });
 
-  // Not just clearing the way: `syncDir` follows a symlink, so syncing onto one
-  // would empty out whatever it points at, somewhere we were never asked about.
+  // `syncDir` follows a symlink, so syncing onto one would empty out whatever it
+  // points at. Remove it first.
   const stat = await lstatOrNull(dir);
   if (stat && !stat.isDirectory()) await fs.rm(dir, { recursive: true, force: true });
 
@@ -74,9 +70,7 @@ async function relink(link, target) {
 /**
  * Remove the skill and every agent's entry for it.
  *
- * Resolves to whether the skill was there, which is all the caller can say —
- * nothing here asks who put it there. Install overwrites whatever holds these
- * paths, so uninstall clears the same paths on the same terms.
+ * Resolves to whether the skill was there.
  */
 export async function removeSkill(name) {
   // The entries go first: once the real directory is gone they only look broken.

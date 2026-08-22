@@ -53,7 +53,7 @@ def require(name: str, hint: str = "") -> str:
     if not value:
         raise SystemExit(
             f"[ws] {name} is not set. Add it to the environment, to ./.env, or to "
-            f"{shared_env_file()} (run `ws-skills setup` to fill it in)."
+            f"{shared_env_file()} (run `npx @masanao-ohba/ws-skills` to fill it in)."
             + (f"\n     {hint}" if hint else "")
         )
     return value

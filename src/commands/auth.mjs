@@ -21,7 +21,6 @@ async function authorizeGoogle(values, { force }) {
     .map((p) => p.trim())
     .filter(Boolean);
 
-  // Named, not counted: a count does not say what to do next.
   const pending = [];
   for (const profile of profiles) {
     const suffix = profileSuffix(profile);

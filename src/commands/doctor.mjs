@@ -66,8 +66,8 @@ async function checkInstall() {
     }
 
     // Agents reading ~/.agents/skills need nothing; the rest need their link.
-    // Where it lands is the question — someone else's skill of the same name
-    // also has a SKILL.md, and reaches nothing of ours.
+    // Compare where it resolves to, not whether it exists: a same-named skill
+    // from elsewhere also has a SKILL.md.
     const real = await fs.realpath(skillDir(skill.name)).catch(() => null);
     const missing = [];
     for (const agent of AGENT_LINKS) {

@@ -89,7 +89,7 @@ wiped, and what is installed has to outlive it.
 - **A channel name is a first-class argument.** `--channel` accepts a name or an ID,
   and both Slack backends resolve names (`slack_channels.resolve` caches the answer
   per workspace). Nothing in the skills should send the reader hunting for an ID by
-  other means — that is what the old sidebar sweep forced, and it cost minutes a run.
+  other means.
 - **English everywhere** in the package: code, comments, docs, prompts.
 - **The Python CLI is not a user surface.** People drive `npx @masanao-ohba/ws-skills`;
   the agent drives `main.py` through the skills. Anything a person has to do — a consent
@@ -112,8 +112,7 @@ setting users could find.
 
 The Slack **API** backend's normalization is fixture-driven — any change to
 `slack_api.py` needs a matching case in `payload/tools/tests/test_slack_api.py`.
-It has been verified against a live workspace (a basic channel fetch with a
-user token); the fixtures remain the regression net.
+The fixtures are the regression net.
 
 `payload/tools/scripts/slack_scraper/` is vendored from
 [masanao-ohba/slack-backup](https://github.com/masanao-ohba/slack-backup); keep

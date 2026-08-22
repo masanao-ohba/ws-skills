@@ -34,9 +34,8 @@ export async function putArtifacts(integrations) {
 /**
  * Bring what is installed to the version this package ships.
  *
- * For a new release of the package, not for a broken install — `install` is
- * unconditional, so re-running it puts anything right. What this command buys
- * is being left alone about credentials.
+ * For a new release of the package: the artifacts are replaced and no credential
+ * is read, written, or asked about.
  */
 export async function updateCommand() {
   flowStart('ws-skills update');

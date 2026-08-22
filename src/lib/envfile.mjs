@@ -26,7 +26,7 @@ const SECTIONS = [
   {
     title: 'General',
     comment: [
-      'WS_INTEGRATIONS records what setup configured; doctor and link read it.',
+      'WS_INTEGRATIONS records which integrations are set up; doctor reads it.',
       'Output directories default to ./references/raw-source and',
       './references/working-notes under whatever directory you run from.',
       'Set them to send everything to one fixed place instead.',

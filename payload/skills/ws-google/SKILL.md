@@ -22,7 +22,7 @@ $WS auth --check     # status of every profile and token
 $WS auth --whoami    # which account a token belongs to
 ```
 
-If `WS_SKILLS_HOME` is set, the tools live there instead of `~/.config/ws-skills`.
+If `WS_SKILLS_HOME` is set, credentials live there instead of `~/.config/ws-skills`.
 
 **Never run `auth` to authorize.** It prints a consent URL and then blocks until a
 person approves it in a browser. If `auth --check` shows a token that is missing or

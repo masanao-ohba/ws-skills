@@ -60,12 +60,12 @@ Have the relevant piece below to hand before you start.
 
 1. Google Cloud Console → APIs & Services → **enable** the Drive, Docs, Sheets and Calendar APIs.
 2. → Credentials → Create credentials → OAuth client ID → **Desktop app** → download the JSON.
-3. Setup asks for that file's path, then offers to authorize.
+3. The installer asks for that file's path, then offers to authorize.
 
 **Reading and writing are deliberately different credentials.** The fetch side holds a
 token whose scopes are read-only, so it cannot write even if something goes wrong — and
 no Drive write scope exists anywhere in this package. Writing to Sheets or Docs is a
-second, separate authorization that setup only runs if you ask for it.
+second, separate authorization that the installer only runs if you ask for it.
 
 The consent URL is printed rather than opened: authorizing a work domain in whichever
 browser the tool happens to launch can invalidate the session in the browser you
@@ -96,7 +96,7 @@ a user token (`xoxp-`) sees what you see.
 > looks wrong.
 
 **Without a token** — Playwright drives its own Chromium, separate from your
-everyday browser, so your normal session is untouched. Setup downloads Chromium
+everyday browser, so your normal session is untouched. The installer downloads Chromium
 (~150 MB) and then asks where the Slack session should come from:
 
 | session | when |
@@ -113,7 +113,7 @@ the run ends.
 <details>
 <summary><b>Backlog</b> — an API key</summary>
 
-Personal Settings → API → register a key. Setup asks for your space host
+Personal Settings → API → register a key. The installer asks for your space host
 (`yourspace.backlog.jp`) and that key. Nothing else to authorize.
 
 If a colleague shared a key that reaches only one project, add it too: it is selected

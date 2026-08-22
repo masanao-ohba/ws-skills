@@ -7,9 +7,7 @@ import { bold, dim, flowEnd, flowStart, heading, info, ok } from '../lib/ui.mjs'
 /**
  * Give the three names back, and with `--purge` the tooling and the credentials.
  *
- * Nothing is asked, on either half: `install` takes these paths without asking,
- * so `uninstall` returns them on the same terms. `--purge` is the whole of the
- * question — passing it is the answer.
+ * Nothing is asked: passing `--purge` is the decision.
  */
 export async function uninstallCommand({ purge = false } = {}) {
   flowStart('ws-skills uninstall');
